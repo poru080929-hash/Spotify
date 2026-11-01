@@ -2,6 +2,7 @@ import os
 import random
 import string
 import time
+import setuptools  # Python 3.14のdistutilsエラー対策
 from flask import Flask, render_template_string, request, make_response
 
 # Selenium & Undetected Chromedriver for Spotify Automation
@@ -13,7 +14,7 @@ from selenium.webdriver.support import expected_conditions as EC
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# --- Spotify Automated Account Creator (@vel0x0.xyz & ファイル保存なし) ---
+# --- Spotify Automated Account Creator (@vel0x0.xyz & 1ファイル完結) ---
 def generate_spotify_account_web():
     letters = string.ascii_lowercase + string.digits
     email = f"{''.join(random.choice(letters) for _ in range(10))}@vel0x0.xyz"
