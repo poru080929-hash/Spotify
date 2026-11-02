@@ -3,6 +3,7 @@ import random
 import string
 import time
 import shutil
+import tempfile
 import setuptools  # Python 3.14のdistutilsエラー対策
 from flask import Flask, render_template_string, request
 
@@ -10,7 +11,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
@@ -29,16 +30,22 @@ def generate_spotify_account_web():
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-software-rasterizer")
-    options.add_argument("--remote-debugging-port=9222")
     options.add_argument("--window-size=1920,1080")
+
+    # リクエストごとにChromeプロファイルを分離する。
+    # 固定ポートや共有プロファイルは、Renderの同時実行時にセッション切断を起こす。
+    profile_dir = tempfile.mkdtemp(prefix="spotify-chrome-")
+    options.add_argument(f"--user-data-dir={profile_dir}")
     
     # Docker環境（Debian系）のパスを明示
     options.binary_location = "/usr/bin/chromium"
     
+    driver = None
     try:
         service = Service("/usr/bin/chromedriver")
         driver = webdriver.Chrome(service=service, options=options)
-    except Exception as e:
+    except WebDriverException as e:
+        shutil.rmtree(profile_dir, ignore_errors=True)
         return {"error": f"Chrome起動失敗 (Docker): {str(e)}"}
     
     try:
@@ -80,8 +87,9 @@ def generate_spotify_account_web():
     finally:
         try:
             driver.quit()
-        except:
+        except Exception:
             pass
+        shutil.rmtree(profile_dir, ignore_errors=True)
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
