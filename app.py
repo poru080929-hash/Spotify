@@ -31,6 +31,8 @@ def generate_spotify_account_web():
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-software-rasterizer")
     options.add_argument("--window-size=1920,1080")
+    # 外部リソースの読み込み待ちでPOST処理が固まらないようにする。
+    options.page_load_strategy = "eager"
 
     # リクエストごとにChromeプロファイルを分離する。
     # 固定ポートや共有プロファイルは、Renderの同時実行時にセッション切断を起こす。
@@ -44,6 +46,8 @@ def generate_spotify_account_web():
     try:
         service = Service("/usr/bin/chromedriver")
         driver = webdriver.Chrome(service=service, options=options)
+        driver.set_page_load_timeout(15)
+        driver.set_script_timeout(15)
     except WebDriverException as e:
         shutil.rmtree(profile_dir, ignore_errors=True)
         return {"error": f"Chrome起動失敗 (Docker): {str(e)}"}
@@ -51,8 +55,12 @@ def generate_spotify_account_web():
     try:
         # Renderの送信元IPに応じてSpotifyが適切な国別ページへリダイレクトする。
         # /jp/signup/ に固定すると、地域確認モーダルで入力欄が disabled になる。
-        driver.get("https://www.spotify.com/signup/")
-        wait = WebDriverWait(driver, 20)
+        try:
+            driver.get("https://www.spotify.com/signup/")
+        except TimeoutException:
+            return {"error": "Spotifyページの読み込みが15秒でタイムアウトしました。"}
+        # ページ読み込み15秒 + 要素待ち12秒で、Webリクエストが無期限に残らないようにする。
+        wait = WebDriverWait(driver, 12)
         
         # Spotifyの現行ページではメール欄のIDが email から username に変更されている。
         # 初期表示時はページの初期化が完了するまで disabled のため、有効化も待つ。
@@ -189,9 +197,9 @@ HTML_TEMPLATE = """
         {% if error_msg %}<div class="notice error">{{ error_msg }}</div>{% endif %}
         {% if success_msg %}<div class="notice success">{{ success_msg }}</div>{% endif %}
 
-        <form method="POST">
+        <form method="POST" onsubmit="startGeneration()">
             <input type="hidden" name="action" value="create_spotify">
-            <button type="submit" class="button-link">Spotifyアカウントを自動生成する</button>
+            <button type="submit" class="button-link" id="generateBtn">Spotifyアカウントを自動生成する</button>
         </form>
 
         {% if spotify_result %}
@@ -207,6 +215,12 @@ HTML_TEMPLATE = """
     </main>
 
     <script>
+        function startGeneration() {
+            var btn = document.getElementById("generateBtn");
+            btn.disabled = true;
+            btn.innerText = "生成中...（最大30秒）";
+        }
+
         function copySpotifyCreds() {
             var copyText = document.getElementById("spotifyCreds");
             copyText.select();
