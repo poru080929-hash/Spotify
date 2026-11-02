@@ -31,8 +31,8 @@ def generate_spotify_account_web():
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-software-rasterizer")
     options.add_argument("--window-size=1920,1080")
-    # 外部リソースの読み込み待ちでPOST処理が固まらないようにする。
-    options.page_load_strategy = "eager"
+    # reCAPTCHA等の外部リソースが完了しなくてもDOMを操作できるようにする。
+    options.page_load_strategy = "none"
 
     # リクエストごとにChromeプロファイルを分離する。
     # 固定ポートや共有プロファイルは、Renderの同時実行時にセッション切断を起こす。
@@ -46,7 +46,7 @@ def generate_spotify_account_web():
     try:
         service = Service("/usr/bin/chromedriver")
         driver = webdriver.Chrome(service=service, options=options)
-        driver.set_page_load_timeout(15)
+        driver.set_page_load_timeout(10)
         driver.set_script_timeout(15)
     except WebDriverException as e:
         shutil.rmtree(profile_dir, ignore_errors=True)
@@ -55,12 +55,9 @@ def generate_spotify_account_web():
     try:
         # Renderの送信元IPに応じてSpotifyが適切な国別ページへリダイレクトする。
         # /jp/signup/ に固定すると、地域確認モーダルで入力欄が disabled になる。
-        try:
-            driver.get("https://www.spotify.com/signup/")
-        except TimeoutException:
-            return {"error": "Spotifyページの読み込みが15秒でタイムアウトしました。"}
-        # ページ読み込み15秒 + 要素待ち12秒で、Webリクエストが無期限に残らないようにする。
-        wait = WebDriverWait(driver, 12)
+        driver.get("https://www.spotify.com/signup/")
+        # ページ全体ではなく、必要な入力欄がDOMに現れるまで待つ。
+        wait = WebDriverWait(driver, 18)
         
         # Spotifyの現行ページではメール欄のIDが email から username に変更されている。
         # 初期表示時はページの初期化が完了するまで disabled のため、有効化も待つ。
