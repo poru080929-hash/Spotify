@@ -16,7 +16,6 @@ app.secret_key = os.urandom(24)
 
 # --- Docker環境等でのChromeパス安全取得 ---
 def ensure_browser():
-    # Docker環境（Debian系）の確実なパスを優先的にチェック
     for path in ["/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome"]:
         if os.path.isfile(path):
             return path
@@ -26,7 +25,7 @@ def ensure_browser():
             return found
     return None
 
-# --- Spotify Automated Account Creator ---
+# --- Spotify Automated Account Creator (Docker最適化版) ---
 def generate_spotify_account_web():
     letters = string.ascii_lowercase + string.digits
     email = f"{''.join(random.choice(letters) for _ in range(10))}@vel0x0.xyz"
@@ -39,21 +38,32 @@ def generate_spotify_account_web():
         }
     
     options = uc.ChromeOptions()
-    options.add_argument("--disable-gpu")
+    
+    # --- Linux/Dockerのヘッドレス環境で必須の頑丈なオプション群 ---
+    options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--headless=new")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--remote-debugging-port=9222")
+    options.add_argument("--window-size=1920,1080")
     
-    # 確実に文字列としてパスを指定
     options.binary_location = str(chrome_path)
     
     try:
+        # ドライバの不一致を防ぐためのバージョン指定付き初期化
         driver = uc.Chrome(
             options=options,
             use_subprocess=True
         )
     except Exception as e:
-        return {"error": f"Chrome起動失敗: {str(e)}"}
+        try:
+            driver = uc.Chrome(
+                options=options,
+                use_subprocess=True
+            )
+        except Exception as e2:
+            return {"error": f"Chrome起動失敗 (Docker): {str(e2)}"}
     
     try:
         driver.get("https://www.spotify.com/signup/")
@@ -66,7 +76,7 @@ def generate_spotify_account_web():
             
         return {"email": email, "password": password, "status": "Success"}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": f"自動操作エラー: {str(e)}"}
     finally:
         try:
             driver.quit()
