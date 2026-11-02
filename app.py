@@ -18,11 +18,10 @@ from selenium.webdriver.support import expected_conditions as EC
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# --- 標準SeleniumによるSpotifyアカウント自動生成 ---
+# --- Spotify登録フォームへの入力（アカウント作成は行わない） ---
 def generate_spotify_account_web():
     letters = string.ascii_lowercase + string.digits
     email = f"{''.join(random.choice(letters) for _ in range(10))}@vel0x0.xyz"
-    password = ''.join(random.choice(letters) for _ in range(12)) + "A1!"
     
     options = Options()
     options.add_argument("--headless=new")
@@ -75,7 +74,14 @@ def generate_spotify_account_web():
             email_input.send_keys(char)
             time.sleep(random.uniform(0.05, 0.15))
             
-        return {"email": email, "password": password, "status": "Success"}
+        return {
+            "email": email,
+            "status": "email_entered",
+            "message": (
+                "メールアドレスを登録フォームに入力しました。"
+                "Spotifyアカウントの作成・ログイン確認は完了していません。"
+            ),
+        }
     except TimeoutException:
         try:
             driver.save_screenshot("/tmp/spotify-timeout.png")
@@ -189,22 +195,22 @@ HTML_TEMPLATE = """
 <body>
     <main class="container">
         <h1>🎵 Spotify アカウント自動生成</h1>
-        <p class="lead">ボタンを押すとサーバー側でブラウザが起動し、@vel0x0.xyz のメールアドレスが自動入力されます。</p>
+        <p class="lead">ボタンを押すとSpotifyの登録フォームにメールアドレスを入力します。アカウント作成自体は完了しません。</p>
 
         {% if error_msg %}<div class="notice error">{{ error_msg }}</div>{% endif %}
         {% if success_msg %}<div class="notice success">{{ success_msg }}</div>{% endif %}
 
         <form method="POST" onsubmit="startGeneration()">
             <input type="hidden" name="action" value="create_spotify">
-            <button type="submit" class="button-link" id="generateBtn">Spotifyアカウントを自動生成する</button>
+            <button type="submit" class="button-link" id="generateBtn">Spotify登録フォームに入力する</button>
         </form>
 
         {% if spotify_result %}
             <div class="result">
-                <p class="result-title">アカウント生成成功！</p>
-                <label style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px;">メールアドレス　　　　　パスワード</label>
+                <p class="result-title">登録フォームへの入力完了</p>
+                <label style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px;">入力したメールアドレス</label>
                 <div class="credential-box">
-                    <input type="text" id="spotifyCreds" value="{{ spotify_result.email }}    {{ spotify_result.password }}" readonly>
+                    <input type="text" id="spotifyCreds" value="{{ spotify_result.email }}" readonly>
                     <button type="button" class="button-link" id="copySpotifyBtn" onclick="copySpotifyCreds()" style="width: 140px; min-height: 56px; margin: 0;">📋 コピー</button>
                 </div>
             </div>
@@ -249,7 +255,7 @@ def index():
                 if "error" in spotify_result:
                     error_msg = f"生成エラー: {spotify_result['error']}"
                 else:
-                    success_msg = "アカウントの自動入力が完了しました！"
+                    success_msg = spotify_result["message"]
             except Exception as e:
                 error_msg = f"エラー: {e}"
 
