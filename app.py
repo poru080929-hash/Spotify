@@ -12,17 +12,27 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException, WebDriverException
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# --- 標準SeleniumによるSpotifyアカウント自動生成 ---
+# --- パスワード生成 (10文字以上、大文字1つ以上、'.'を1つ以上含む) ---
+def generate_secure_password():
+    lower_digits = string.ascii_lowercase + string.digits
+    base = ''.join(random.choice(lower_digits) for _ in range(10))
+    pw_list = list(base)
+    pw_list[0] = random.choice(string.ascii_uppercase)
+    pw_list[1] = '.'
+    random.shuffle(pw_list)
+    return ''.join(pw_list)
+
+# --- 標準SeleniumによるSpotifyアカウント自動生成 (厳格完了確認版) ---
 def generate_spotify_account_web():
     letters = string.ascii_lowercase + string.digits
     email = f"{''.join(random.choice(letters) for _ in range(10))}@vel0x0.xyz"
-    password = ''.join(random.choice(letters) for _ in range(12)) + "A1!"
+    password = generate_secure_password()
     
     options = Options()
     options.add_argument("--headless=new")
@@ -31,36 +41,27 @@ def generate_spotify_account_web():
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-software-rasterizer")
     options.add_argument("--window-size=1920,1080")
-    # reCAPTCHA等の外部リソースが完了しなくてもDOMを操作できるようにする。
     options.page_load_strategy = "none"
 
-    # リクエストごとにChromeプロファイルを分離する。
-    # 固定ポートや共有プロファイルは、Renderの同時実行時にセッション切断を起こす。
     profile_dir = tempfile.mkdtemp(prefix="spotify-chrome-")
     options.add_argument(f"--user-data-dir={profile_dir}")
-    
-    # Docker環境（Debian系）のパスを明示
     options.binary_location = "/usr/bin/chromium"
     
     driver = None
     try:
         service = Service("/usr/bin/chromedriver")
         driver = webdriver.Chrome(service=service, options=options)
-        driver.set_page_load_timeout(10)
+        driver.set_page_load_timeout(15)
         driver.set_script_timeout(15)
     except WebDriverException as e:
         shutil.rmtree(profile_dir, ignore_errors=True)
         return {"error": f"Chrome起動失敗 (Docker): {str(e)}"}
     
     try:
-        # Renderの送信元IPに応じてSpotifyが適切な国別ページへリダイレクトする。
-        # /jp/signup/ に固定すると、地域確認モーダルで入力欄が disabled になる。
         driver.get("https://www.spotify.com/signup/")
-        # ページ全体ではなく、必要な入力欄がDOMに現れるまで待つ。
-        wait = WebDriverWait(driver, 18)
+        wait = WebDriverWait(driver, 15)
         
-        # Spotifyの現行ページではメール欄のIDが email から username に変更されている。
-        # 初期表示時はページの初期化が完了するまで disabled のため、有効化も待つ。
+        # 1. メールアドレス入力
         email_input = wait.until(
             EC.element_to_be_clickable(
                 (
@@ -73,20 +74,117 @@ def generate_spotify_account_web():
         )
         for char in email:
             email_input.send_keys(char)
-            time.sleep(random.uniform(0.05, 0.15))
+            time.sleep(random.uniform(0.02, 0.05))
             
+        # 次へボタン
+        next_btn = wait.until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[data-testid="submit"], button[type="submit"]'))
+        )
+        next_btn.click()
+        time.sleep(2)
+
+        # 2. パスワード入力
+        password_input = wait.until(
+            EC.element_to_be_clickable(
+                (
+                    By.CSS_SELECTOR,
+                    'input#password:not([disabled]), '
+                    'input[name="password"]:not([disabled]), '
+                    'input[type="password"]:not([disabled])'
+                )
+            )
+        )
+        for char in password:
+            password_input.send_keys(char)
+            time.sleep(random.uniform(0.02, 0.05))
+            
+        next_btn = wait.until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[data-testid="submit"], button[type="submit"]'))
+        )
+        next_btn.click()
+        time.sleep(2)
+
+        # 3. 名前入力 (指定の空白文字)
+        name_input = wait.until(
+            EC.element_to_be_clickable(
+                (
+                    By.CSS_SELECTOR,
+                    'input#displayName:not([disabled]), '
+                    'input[name="displayName"]:not([disabled]), '
+                    'input[id*="name"]:not([disabled])'
+                )
+            )
+        )
+        target_name = "⠀⠀ ⠀ ⠀"
+        for char in target_name:
+            name_input.send_keys(char)
+            time.sleep(random.uniform(0.02, 0.05))
+
+        # 4. 生年月日入力 (18歳以上60歳未満: 1966年〜2008年をランダム選択)
+        birth_year = str(random.randint(1966, 2008))
+        birth_month = str(random.randint(1, 12))
+        birth_day = str(random.randint(1, 28))
+
+        year_input = wait.until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, 'input#year, input[name="year"]'))
+        )
+        year_input.send_keys(birth_year)
+        
+        try:
+            month_select = driver.find_element(By.CSS_SELECTOR, 'select#month, select[name="month"]')
+            Select(month_select).select_by_value(birth_month)
+        except Exception:
+            month_input = driver.find_element(By.CSS_SELECTOR, 'input#month, input[name="month"]')
+            month_input.send_keys(birth_month)
+            
+        day_input = driver.find_element(By.CSS_SELECTOR, 'input#day, input[name="day"]')
+        day_input.send_keys(birth_day)
+
+        # 生年月日入力後の「次へ」ボタン
+        next_btn = wait.until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[data-testid="submit"], button[type="submit"]'))
+        )
+        next_btn.click()
+        time.sleep(2)
+
+        # 5. 利用規約などの最終同意・登録完了ボタンの押下
+        # Spotifyの登録フローによって「登録する」や複数のチェックボックス・規約同意ボタンが現れるため順次処理
+        try:
+            # 性別選択があれば適当に選択（例：指定なし、または最初のラジオボタン）
+            gender_options = driver.find_elements(By.CSS_SELECTOR, 'input[type="radio"]')
+            if gender_options:
+                gender_options[0].click()
+                time.sleep(1)
+        except Exception:
+            pass
+
+        # 最終の「Spotifyに登録する」などのボタンを探してクリック
+        for _ in range(2):
+            try:
+                submit_btn = wait.until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[data-testid="submit"], button[type="submit"]'))
+                )
+                submit_btn.click()
+                time.sleep(3)
+            except Exception:
+                break
+
+        # 6. 【重要】アカウント作成が本当に完了したかをURLや画面遷移で検証
+        # 登録が成功するとURLが /signup から /account や /overview などに変わる、またはウェルカム要素が出現する
+        time.sleep(3)
+        current_url = driver.current_url
+        if "signup" in current_url:
+            # まだサインアップ画面に留まっている場合は、reCAPTCHAやブロックに阻まれている可能性が高い
+            return {"error": f"登録が完了しませんでした（登録画面で停止中）。URL: {current_url}"}
+
         return {"email": email, "password": password, "status": "Success"}
-    except TimeoutException:
+
+    except TimeoutException as e:
         try:
             driver.save_screenshot("/tmp/spotify-timeout.png")
         except Exception:
             pass
-        return {
-            "error": (
-                "Spotifyのメール入力欄が見つかりませんでした。"
-                f" URL={driver.current_url} title={driver.title}"
-            )
-        }
+        return {"error": f"タイムアウト発生（要素が見つかりません）: {str(e)}"}
     except Exception as e:
         return {"error": f"自動操作エラー: {str(e)}"}
     finally:
@@ -189,7 +287,7 @@ HTML_TEMPLATE = """
 <body>
     <main class="container">
         <h1>🎵 Spotify アカウント自動生成</h1>
-        <p class="lead">ボタンを押すとサーバー側でブラウザが起動し、@vel0x0.xyz のメールアドレスが自動入力されます。</p>
+        <p class="lead">ボタンを押すとサーバー側でブラウザが起動し、登録完了まで自動処理します。</p>
 
         {% if error_msg %}<div class="notice error">{{ error_msg }}</div>{% endif %}
         {% if success_msg %}<div class="notice success">{{ success_msg }}</div>{% endif %}
@@ -201,7 +299,7 @@ HTML_TEMPLATE = """
 
         {% if spotify_result %}
             <div class="result">
-                <p class="result-title">アカウント生成成功！</p>
+                <p class="result-title">アカウント登録成功！</p>
                 <label style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px;">メールアドレス　　　　　パスワード</label>
                 <div class="credential-box">
                     <input type="text" id="spotifyCreds" value="{{ spotify_result.email }}    {{ spotify_result.password }}" readonly>
@@ -215,7 +313,7 @@ HTML_TEMPLATE = """
         function startGeneration() {
             var btn = document.getElementById("generateBtn");
             btn.disabled = true;
-            btn.innerText = "生成中...（最大30秒）";
+            btn.innerText = "生成・登録中...（最大45秒）";
         }
 
         function copySpotifyCreds() {
@@ -249,7 +347,7 @@ def index():
                 if "error" in spotify_result:
                     error_msg = f"生成エラー: {spotify_result['error']}"
                 else:
-                    success_msg = "アカウントの自動入力が完了しました！"
+                    success_msg = "Spotifyアカウントの作成と登録が完了しました！"
             except Exception as e:
                 error_msg = f"エラー: {e}"
 
