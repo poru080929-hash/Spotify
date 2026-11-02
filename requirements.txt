@@ -1,5 +1,4 @@
 Flask
 gunicorn
 selenium
-undetected-chromedriver
 setuptools
