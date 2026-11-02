@@ -10,6 +10,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
@@ -41,15 +42,34 @@ def generate_spotify_account_web():
         return {"error": f"Chrome起動失敗 (Docker): {str(e)}"}
     
     try:
-        driver.get("https://www.spotify.com/signup/")
+        driver.get("https://www.spotify.com/jp/signup/")
         wait = WebDriverWait(driver, 20)
         
-        email_input = wait.until(EC.presence_of_element_located((By.ID, "email")))
+        # Spotifyの現行ページではメール欄のIDが email から username に変更されている。
+        email_input = wait.until(
+            EC.visibility_of_element_located(
+                (
+                    By.CSS_SELECTOR,
+                    'input#username, input[name="username"], input[type="email"]'
+                )
+            )
+        )
         for char in email:
             email_input.send_keys(char)
             time.sleep(random.uniform(0.05, 0.15))
             
         return {"email": email, "password": password, "status": "Success"}
+    except TimeoutException:
+        try:
+            driver.save_screenshot("/tmp/spotify-timeout.png")
+        except Exception:
+            pass
+        return {
+            "error": (
+                "Spotifyのメール入力欄が見つかりませんでした。"
+                f" URL={driver.current_url} title={driver.title}"
+            )
+        }
     except Exception as e:
         return {"error": f"自動操作エラー: {str(e)}"}
     finally:
