@@ -14,9 +14,10 @@ from selenium.webdriver.support import expected_conditions as EC
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# --- Render環境等でのChromeパス安全取得 ---
+# --- Docker環境等でのChromeパス安全取得 ---
 def ensure_browser():
-    for path in ["/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"]:
+    # Docker環境（Debian系）の確実なパスを優先的にチェック
+    for path in ["/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome"]:
         if os.path.isfile(path):
             return path
     for name in ["google-chrome", "chrome", "chromium", "Google Chrome"]:
@@ -25,7 +26,7 @@ def ensure_browser():
             return found
     return None
 
-# --- Spotify Automated Account Creator (エラー明文化対応版) ---
+# --- Spotify Automated Account Creator ---
 def generate_spotify_account_web():
     letters = string.ascii_lowercase + string.digits
     email = f"{''.join(random.choice(letters) for _ in range(10))}@vel0x0.xyz"
@@ -34,7 +35,7 @@ def generate_spotify_account_web():
     chrome_path = ensure_browser()
     if not chrome_path:
         return {
-            "error": "Render環境にChrome/Chromiumが見つかりません（Aptfileによる導入またはDocker環境が必要です）"
+            "error": "Docker環境内にChromiumが見つかりません"
         }
     
     options = uc.ChromeOptions()
@@ -43,6 +44,7 @@ def generate_spotify_account_web():
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--headless=new")
     
+    # 確実に文字列としてパスを指定
     options.binary_location = str(chrome_path)
     
     try:
@@ -207,7 +209,7 @@ HTML_TEMPLATE = """
 @app.route("/", methods=["GET", "POST"])
 def index():
     error_msg = None
-    success_msg = None  # タイポ修正済み (success_nsg -> success_msg)
+    success_msg = None
     spotify_result = None
 
     if request.method == "POST":
