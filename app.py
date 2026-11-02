@@ -42,7 +42,9 @@ def generate_spotify_account_web():
         return {"error": f"Chrome起動失敗 (Docker): {str(e)}"}
     
     try:
-        driver.get("https://www.spotify.com/jp/signup/")
+        # Renderの送信元IPに応じてSpotifyが適切な国別ページへリダイレクトする。
+        # /jp/signup/ に固定すると、地域確認モーダルで入力欄が disabled になる。
+        driver.get("https://www.spotify.com/signup/")
         wait = WebDriverWait(driver, 20)
         
         # Spotifyの現行ページではメール欄のIDが email から username に変更されている。
