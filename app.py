@@ -13,6 +13,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
+from selenium.webdriver.support import expected_conditions as EC  # ←ここを追加！
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -55,21 +56,20 @@ def generate_secure_password():
     random.shuffle(pw_list)
     return ''.join(pw_list)
 
-# --- クラウドブラウザによる自動入力処理（DevTools対策版） ---
+# --- クラウドブラウザによる自動入力処理 ---
 def generate_spotify_account_web():
     letters = string.ascii_lowercase + string.digits
     email = f"{''.join(random.choice(letters) for _ in range(10))}@vel0x0.xyz"
     password = generate_secure_password()
     
     options = Options()
-    # --- DevToolsエラーを防ぐ最適化オプション ---
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-software-rasterizer")
     options.add_argument("--disable-setuid-sandbox")
     options.add_argument("--no-zygote")
-    options.add_argument("--remote-debugging-port=9222")  # デバッグポートを明示して接続エラーを防止
+    options.add_argument("--remote-debugging-port=9222")
     options.add_argument("--disable-accelerated-2d-canvas")
     options.add_argument("--disable-infobars")
     options.add_argument("--disable-extensions")
