@@ -21,7 +21,7 @@ app.secret_key = os.urandom(24)
 # 内部で動いている websockify (noVNC) のポート
 NOVNC_INTERNAL_PORT = 6080
 
-# --- Flaskを通じた noVNC のリバースプロキシ（iframeやWebSocket用） ---
+# --- Flaskを通じた noVNC のリバースプロキシ ---
 @app.route('/websockify', methods=['GET'])
 @app.route('/vnc.html', methods=['GET'])
 @app.route('/vnc_lite.html', methods=['GET'])
@@ -46,7 +46,7 @@ def proxy_novnc(subpath=""):
     except Exception as e:
         return f"VNC Proxy Error: {str(e)}", 502
 
-# --- パスワード生成 (10文字以上、大文字1つ以上、'.'を1つ以上含む) ---
+# --- パスワード生成 ---
 def generate_secure_password():
     lower_digits = string.ascii_lowercase + string.digits
     base = ''.join(random.choice(lower_digits) for _ in range(10))
@@ -56,22 +56,20 @@ def generate_secure_password():
     random.shuffle(pw_list)
     return ''.join(pw_list)
 
-# --- クラウドブラウザによる自動入力処理（インスタンス即死完全対策） ---
+# --- クラウドブラウザによる自動入力処理（詳細デバッグ版） ---
 def generate_spotify_account_web():
     letters = string.ascii_lowercase + string.digits
     email = f"{''.join(random.choice(letters) for _ in range(10))}@vel0x0.xyz"
     password = generate_secure_password()
     
     options = Options()
-    # --- コンテナ環境専用の強力な起動引数（Instance Exited防止） ---
-    options.add_argument("--headless=new")  # 一旦ヘッドレスで確実に立ち上げてから画面に反映させるか、安定性を重視
     options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")  # 共有メモリ不足対策（必須）
+    options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-software-rasterizer")
     options.add_argument("--disable-setuid-sandbox")
     options.add_argument("--no-zygote")
-    options.add_argument("--single-process")          # コンテナ特有のプロセス即死を防ぐ最終防衛ライン
+    options.add_argument("--single-process")
     options.add_argument("--disable-accelerated-2d-canvas")
     options.add_argument("--disable-infobars")
     options.add_argument("--disable-extensions")
@@ -80,11 +78,12 @@ def generate_spotify_account_web():
     options.binary_location = "/usr/bin/chromium"
     os.environ["DISPLAY"] = ":99"
     
+    driver = None
     try:
         service = Service("/usr/bin/chromedriver")
         driver = webdriver.Chrome(service=service, options=options)
     except Exception as e:
-        return {"error": f"Chrome起動失敗 (Docker): {str(e)}"}
+        return {"error": f"Chrome起動失敗: {str(e)}"}
     
     try:
         driver.get("https://www.spotify.com/signup/")
@@ -144,7 +143,13 @@ def generate_spotify_account_web():
         return {"email": email, "password": password, "status": "Waiting_For_Human"}
 
     except Exception as e:
-        return {"error": f"自動操作途中で停止: {str(e)}"}
+        err_msg = str(e)
+        if not err_msg and driver:
+            try:
+                err_msg = f"URL: {driver.current_url}, Title: {driver.title}"
+            except:
+                err_msg = "詳細不明の例外（ブラウザ応答なし）"
+        return {"error": f"自動操作途中で停止: {err_msg}"}
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
