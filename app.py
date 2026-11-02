@@ -46,11 +46,14 @@ def generate_spotify_account_web():
         wait = WebDriverWait(driver, 20)
         
         # Spotifyの現行ページではメール欄のIDが email から username に変更されている。
+        # 初期表示時はページの初期化が完了するまで disabled のため、有効化も待つ。
         email_input = wait.until(
-            EC.visibility_of_element_located(
+            EC.element_to_be_clickable(
                 (
                     By.CSS_SELECTOR,
-                    'input#username, input[name="username"], input[type="email"]'
+                    'input#username:not([disabled]), '
+                    'input[name="username"]:not([disabled]), '
+                    'input[type="email"]:not([disabled])'
                 )
             )
         )
