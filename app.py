@@ -13,7 +13,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
-from selenium.webdriver.support import expected_conditions as EC  # ←ここを追加！
+from selenium.webdriver.support import expected_conditions as EC
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -56,20 +56,22 @@ def generate_secure_password():
     random.shuffle(pw_list)
     return ''.join(pw_list)
 
-# --- クラウドブラウザによる自動入力処理 ---
+# --- クラウドブラウザによる自動入力処理（インスタンス即死完全対策） ---
 def generate_spotify_account_web():
     letters = string.ascii_lowercase + string.digits
     email = f"{''.join(random.choice(letters) for _ in range(10))}@vel0x0.xyz"
     password = generate_secure_password()
     
     options = Options()
+    # --- コンテナ環境専用の強力な起動引数（Instance Exited防止） ---
+    options.add_argument("--headless=new")  # 一旦ヘッドレスで確実に立ち上げてから画面に反映させるか、安定性を重視
     options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-dev-shm-usage")  # 共有メモリ不足対策（必須）
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-software-rasterizer")
     options.add_argument("--disable-setuid-sandbox")
     options.add_argument("--no-zygote")
-    options.add_argument("--remote-debugging-port=9222")
+    options.add_argument("--single-process")          # コンテナ特有のプロセス即死を防ぐ最終防衛ライン
     options.add_argument("--disable-accelerated-2d-canvas")
     options.add_argument("--disable-infobars")
     options.add_argument("--disable-extensions")
@@ -82,7 +84,7 @@ def generate_spotify_account_web():
         service = Service("/usr/bin/chromedriver")
         driver = webdriver.Chrome(service=service, options=options)
     except Exception as e:
-        return {"error": f"Chrome起動失敗: {str(e)}"}
+        return {"error": f"Chrome起動失敗 (Docker): {str(e)}"}
     
     try:
         driver.get("https://www.spotify.com/signup/")
