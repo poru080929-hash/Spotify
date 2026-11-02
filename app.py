@@ -6,7 +6,9 @@ import shutil
 import setuptools  # Python 3.14のdistutilsエラー対策
 from flask import Flask, render_template_string, request
 
-import undetected_chromedriver as uc
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -14,32 +16,13 @@ from selenium.webdriver.support import expected_conditions as EC
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# --- Docker環境等でのChromeパス安全取得 ---
-def ensure_browser():
-    for path in ["/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome"]:
-        if os.path.isfile(path):
-            return path
-    for name in ["google-chrome", "chrome", "chromium", "Google Chrome"]:
-        found = shutil.which(name)
-        if found:
-            return found
-    return None
-
-# --- Spotify Automated Account Creator (Docker最適化版) ---
+# --- 標準SeleniumによるSpotifyアカウント自動生成 ---
 def generate_spotify_account_web():
     letters = string.ascii_lowercase + string.digits
     email = f"{''.join(random.choice(letters) for _ in range(10))}@vel0x0.xyz"
     password = ''.join(random.choice(letters) for _ in range(12)) + "A1!"
     
-    chrome_path = ensure_browser()
-    if not chrome_path:
-        return {
-            "error": "Docker環境内にChromiumが見つかりません"
-        }
-    
-    options = uc.ChromeOptions()
-    
-    # --- Linux/Dockerのヘッドレス環境で必須の頑丈なオプション群 ---
+    options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
@@ -48,22 +31,14 @@ def generate_spotify_account_web():
     options.add_argument("--remote-debugging-port=9222")
     options.add_argument("--window-size=1920,1080")
     
-    options.binary_location = str(chrome_path)
+    # Docker環境（Debian系）のパスを明示
+    options.binary_location = "/usr/bin/chromium"
     
     try:
-        # ドライバの不一致を防ぐためのバージョン指定付き初期化
-        driver = uc.Chrome(
-            options=options,
-            use_subprocess=True
-        )
+        service = Service("/usr/bin/chromedriver")
+        driver = webdriver.Chrome(service=service, options=options)
     except Exception as e:
-        try:
-            driver = uc.Chrome(
-                options=options,
-                use_subprocess=True
-            )
-        except Exception as e2:
-            return {"error": f"Chrome起動失敗 (Docker): {str(e2)}"}
+        return {"error": f"Chrome起動失敗 (Docker): {str(e)}"}
     
     try:
         driver.get("https://www.spotify.com/signup/")
