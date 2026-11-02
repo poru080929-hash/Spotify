@@ -28,7 +28,6 @@ NOVNC_INTERNAL_PORT = 6080
 @app.route('/core/<path:subpath>', methods=['GET', 'POST'])
 @app.route('/vendor/<path:subpath>', methods=['GET', 'POST'])
 def proxy_novnc(subpath=""):
-    # 内部の websockify (6080) にリクエストを転送
     target_url = f"http://localhost:{NOVNC_INTERNAL_PORT}{request.full_path}"
     try:
         resp = requests.request(
@@ -46,7 +45,7 @@ def proxy_novnc(subpath=""):
     except Exception as e:
         return f"VNC Proxy Error: {str(e)}", 502
 
-# パスワード生成
+# --- パスワード生成 (10文字以上、大文字1つ以上、'.'を1つ以上含む) ---
 def generate_secure_password():
     lower_digits = string.ascii_lowercase + string.digits
     base = ''.join(random.choice(lower_digits) for _ in range(10))
@@ -56,17 +55,26 @@ def generate_secure_password():
     random.shuffle(pw_list)
     return ''.join(pw_list)
 
-# 自動入力処理
+# --- クラウドブラウザによる自動入力処理（完全防御オプション付き） ---
 def generate_spotify_account_web():
     letters = string.ascii_lowercase + string.digits
     email = f"{''.join(random.choice(letters) for _ in range(10))}@vel0x0.xyz"
     password = generate_secure_password()
     
     options = Options()
+    # --- Chrome強制終了（instance exited）を防ぐ最強の防御オプション群 ---
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--disable-setuid-sandbox")
+    options.add_argument("--no-zygote")
+    options.add_argument("--single-process")
+    options.add_argument("--disable-accelerated-2d-canvas")
+    options.add_argument("--disable-infobars")
+    options.add_argument("--disable-extensions")
     options.add_argument("--window-size=1280,720")
+    
     options.binary_location = "/usr/bin/chromium"
     os.environ["DISPLAY"] = ":99"
     
@@ -104,7 +112,7 @@ def generate_spotify_account_web():
         next_btn.click()
         time.sleep(2)
 
-        # 3. 名前入力
+        # 3. 名前入力 (指定の空白文字: ⠀⠀ ⠀ ⠀)
         name_input = wait.until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, 'input#displayName, input[name="displayName"], input[id*="name"]'))
         )
@@ -112,7 +120,7 @@ def generate_spotify_account_web():
             name_input.send_keys(char)
             time.sleep(0.05)
 
-        # 4. 生年月日入力
+        # 4. 生年月日入力 (18歳以上60歳未満: 1966年〜2008年)
         birth_year = str(random.randint(1966, 2008))
         birth_month = str(random.randint(1, 12))
         birth_day = str(random.randint(1, 28))
@@ -166,7 +174,6 @@ HTML_TEMPLATE = """
 
         {% if started %}
             <h3>👇 サーバー上のブラウザ画面（スマホから操作可能）</h3>
-            <!-- 同一ポート経由でリバースプロキシされるため404にならない -->
             <iframe id="browser-frame" src="/vnc.html?autoconnect=true&resize=scale&reconnect=true"></iframe>
         {% endif %}
 
