@@ -2,10 +2,10 @@ import os
 import random
 import string
 import time
+import shutil
 import setuptools  # Python 3.14のdistutilsエラー対策
-from flask import Flask, render_template_string, request, make_response
+from flask import Flask, render_template_string, request
 
-# Selenium & Undetected Chromedriver for Spotify Automation
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -14,17 +14,44 @@ from selenium.webdriver.support import expected_conditions as EC
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# --- Spotify Automated Account Creator (@vel0x0.xyz & 1ファイル完結) ---
+# --- Render環境等でのChromeパス安全取得 ---
+def ensure_browser():
+    for path in ["/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"]:
+        if os.path.isfile(path):
+            return path
+    for name in ["google-chrome", "chrome", "chromium", "Google Chrome"]:
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
+
+# --- Spotify Automated Account Creator (エラー明文化対応版) ---
 def generate_spotify_account_web():
     letters = string.ascii_lowercase + string.digits
     email = f"{''.join(random.choice(letters) for _ in range(10))}@vel0x0.xyz"
     password = ''.join(random.choice(letters) for _ in range(12)) + "A1!"
     
+    chrome_path = ensure_browser()
+    if not chrome_path:
+        return {
+            "error": "Render環境にChrome/Chromiumが見つかりません（Aptfileによる導入またはDocker環境が必要です）"
+        }
+    
     options = uc.ChromeOptions()
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--headless=new")
     
-    driver = uc.Chrome(options=options, use_subprocess=True)
+    options.binary_location = str(chrome_path)
+    
+    try:
+        driver = uc.Chrome(
+            options=options,
+            use_subprocess=True
+        )
+    except Exception as e:
+        return {"error": f"Chrome起動失敗: {str(e)}"}
     
     try:
         driver.get("https://www.spotify.com/signup/")
@@ -137,7 +164,7 @@ HTML_TEMPLATE = """
 <body>
     <main class="container">
         <h1>🎵 Spotify アカウント自動生成</h1>
-        <p class="lead">ボタンを押すとブラウザが起動し、@vel0x0.xyz のメールアドレスが自動入力されます。</p>
+        <p class="lead">ボタンを押すとサーバー側でブラウザが起動し、@vel0x0.xyz のメールアドレスが自動入力されます。</p>
 
         {% if error_msg %}<div class="notice error">{{ error_msg }}</div>{% endif %}
         {% if success_msg %}<div class="notice success">{{ success_msg }}</div>{% endif %}
@@ -180,7 +207,7 @@ HTML_TEMPLATE = """
 @app.route("/", methods=["GET", "POST"])
 def index():
     error_msg = None
-    success_msg = None
+    success_msg = None  # タイポ修正済み (success_nsg -> success_msg)
     spotify_result = None
 
     if request.method == "POST":
@@ -203,4 +230,5 @@ def index():
     )
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+    port = int(os.environ.get("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
