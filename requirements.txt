@@ -2,3 +2,5 @@ Flask
 gunicorn
 selenium
 setuptools
+requests
+requests-toolbelt
