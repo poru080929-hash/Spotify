@@ -5,22 +5,48 @@ import time
 import shutil
 import tempfile
 import setuptools
-from flask import Flask, render_template_string, request
+import requests
+from flask import Flask, render_template_string, request, Response
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.support.ui import WebDriverWait, Select
-from selenium.webdriver.support import expected_conditions as EC
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# 共有用のグローバル変数（今動いているドライバの参照用）
-current_driver = None
+# 内部で動いている websockify (noVNC) のポート
+NOVNC_INTERNAL_PORT = 6080
 
+# --- Flaskを通じた noVNC のリバースプロキシ（iframeやWebSocket用） ---
+@app.route('/websockify', methods=['GET'])
+@app.route('/vnc.html', methods=['GET'])
+@app.route('/vnc_lite.html', methods=['GET'])
+@app.route('/app/<path:subpath>', methods=['GET', 'POST'])
+@app.route('/core/<path:subpath>', methods=['GET', 'POST'])
+@app.route('/vendor/<path:subpath>', methods=['GET', 'POST'])
+def proxy_novnc(subpath=""):
+    # 内部の websockify (6080) にリクエストを転送
+    target_url = f"http://localhost:{NOVNC_INTERNAL_PORT}{request.full_path}"
+    try:
+        resp = requests.request(
+            method=request.method,
+            url=target_url,
+            headers={key: value for (key, value) in request.headers if key != 'Host'},
+            data=request.get_data(),
+            cookies=request.cookies,
+            allow_redirects=False,
+            timeout=10
+        )
+        excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
+        headers = [(name, value) for (name, value) in resp.raw.headers.items() if name.lower() not in excluded_headers]
+        return Response(resp.content, resp.status_code, headers)
+    except Exception as e:
+        return f"VNC Proxy Error: {str(e)}", 502
+
+# パスワード生成
 def generate_secure_password():
     lower_digits = string.ascii_lowercase + string.digits
     base = ''.join(random.choice(lower_digits) for _ in range(10))
@@ -30,28 +56,24 @@ def generate_secure_password():
     random.shuffle(pw_list)
     return ''.join(pw_list)
 
+# 自動入力処理
 def generate_spotify_account_web():
-    global current_driver
     letters = string.ascii_lowercase + string.digits
     email = f"{''.join(random.choice(letters) for _ in range(10))}@vel0x0.xyz"
     password = generate_secure_password()
     
     options = Options()
-    # ヘッドレスを解除し、仮想ディスプレイ（DISPLAY=:99）上でガッツリ画面を表示させる
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1280,720")
     options.binary_location = "/usr/bin/chromium"
-    
-    # 仮想画面のディスプレイを指定
     os.environ["DISPLAY"] = ":99"
     
     try:
         service = Service("/usr/bin/chromedriver")
         driver = webdriver.Chrome(service=service, options=options)
-        current_driver = driver
-    except WebDriverException as e:
+    except Exception as e:
         return {"error": f"Chrome起動失敗: {str(e)}"}
     
     try:
@@ -123,16 +145,16 @@ HTML_TEMPLATE = """
     <title>Cloud Browser Spotify Creator</title>
     <style>
         body { background: #090909; color: #fff; font-family: sans-serif; margin: 0; padding: 20px; text-align: center; }
-        .container { max-width: 800px; margin: 0 auto; }
+        .container { max-width: 900px; margin: 0 auto; }
         .button-link { background: #1DB954; color: #fff; padding: 15px 30px; font-size: 16px; font-weight: bold; border: none; border-radius: 12px; cursor: pointer; margin-bottom: 20px; }
-        #browser-frame { width: 100%; height: 500px; border: 2px solid #333; border-radius: 12px; background: #000; }
+        #browser-frame { width: 100%; height: 600px; border: 2px solid #333; border-radius: 12px; background: #000; }
         .result { margin-top: 20px; padding: 15px; background: rgba(29, 185, 84, 0.1); border: 1px solid #1DB954; border-radius: 12px; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🎵 クラウドブラウザ・自動アカウント生成</h1>
-        <p>下のボタンを押すとサーバー側でブラウザが起動し、フォームまで自動入力されます。<br>認証画面が出たら下の画面をスマホで直接タップして操作してください！</p>
+        <p>ボタンを押すとサーバー側でブラウザが起動し、フォームまで自動入力されます。<br>認証画面が出たら下の画面をスマホで直接タップして操作してください！</p>
 
         <form method="POST">
             <input type="hidden" name="action" value="start_process">
@@ -144,7 +166,7 @@ HTML_TEMPLATE = """
 
         {% if started %}
             <h3>👇 サーバー上のブラウザ画面（スマホから操作可能）</h3>
-            <!-- noVNCを使ってスマホのブラウザ内にサーバーのChrome画面を表示 -->
+            <!-- 同一ポート経由でリバースプロキシされるため404にならない -->
             <iframe id="browser-frame" src="/vnc.html?autoconnect=true&resize=scale&reconnect=true"></iframe>
         {% endif %}
 
@@ -174,7 +196,7 @@ def index():
             if "error" in spotify_result:
                 error_msg = spotify_result["error"]
             else:
-                success_msg = "フォームの自動入力が完了しました！reCAPTCHAを画面でクリアしてください。"
+                success_msg = "フォームの自動入力が完了しました！画面からreCAPTCHAをクリアしてください。"
 
     return render_template_string(
         HTML_TEMPLATE,
@@ -186,5 +208,4 @@ def index():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "5000"))
-    # Gunicorn経由ではなく直接実行の場合のポート対応
     app.run(host="0.0.0.0", port=port, debug=False)
