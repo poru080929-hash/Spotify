@@ -33,10 +33,9 @@ def set_state(**values):
 
 
 def wait_element(wait, selector, clickable=False):
+    # タイムアウトを防ぐため、clickable判定ではなく存在確認(presence)をベースにしつつ安全に取得する
     condition = (
-        EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
-        if clickable
-        else EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+        EC.presence_of_element_located((By.CSS_SELECTOR, selector))
     )
     return wait.until(condition)
 
@@ -88,8 +87,11 @@ def run_action(browser, wait, action, index):
 
     if kind == "goto":
         browser.get(action["url"])
+        time.sleep(2) # ページ遷移後の読み込みを少し待つ
     elif kind == "click":
-        wait_element(wait, action["selector"], clickable=True).click()
+        # 要素を取得してJavaScriptで強制クリック（script timeout対策）
+        element = wait_element(wait, action["selector"])
+        browser.execute_script("arguments[0].click();", element)
     elif kind == "fill":
         element = wait_element(wait, action["selector"])
         element.clear()
@@ -98,9 +100,9 @@ def run_action(browser, wait, action, index):
         element = wait_element(wait, action["selector"])
         Select(element).select_by_value(str(action_value(action)))
     elif kind == "check":
-        element = wait_element(wait, action["selector"], clickable=True)
+        element = wait_element(wait, action["selector"])
         if not element.is_selected():
-            element.click()
+            browser.execute_script("arguments[0].click();", element)
     elif kind == "wait":
         time.sleep(float(action.get("seconds", 1)))
     elif kind == "scroll":
