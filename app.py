@@ -33,7 +33,7 @@ def set_state(**values):
 
 
 def wait_element(wait, selector, clickable=False):
-    # カンマ区切りのセレクタ（例: "a[foo], b[bar]"）を個別に分割して安全に探索する
+    # カンマ区切りのセレクタを分解して安全に探索
     selectors = [s.strip() for s in selector.split(",")]
     start_time = time.time()
     while time.time() - start_time < 20:
@@ -41,6 +41,10 @@ def wait_element(wait, selector, clickable=False):
             try:
                 elements = driver.find_elements(By.CSS_SELECTOR, sel)
                 if elements:
+                    # 見つかった要素が表示状態（is_displayed）になるのを確認して返す
+                    for el in elements:
+                        if el.is_displayed():
+                            return el
                     return elements[0]
             except Exception:
                 pass
@@ -97,15 +101,14 @@ def run_action(browser, wait, action, index):
         browser.get(action["url"])
         time.sleep(2)
     elif kind == "click":
-        # 要素を取得してJavaScriptで強制クリック（script timeout対策）
         element = wait_element(wait, action["selector"])
         browser.execute_script("arguments[0].click();", element)
-        time.sleep(1)
+        time.sleep(1.5)  # クリック後の画面遷移待機
     elif kind == "fill":
         element = wait_element(wait, action["selector"])
         element.clear()
         element.send_keys(action_value(action))
-        time.sleep(1)
+        time.sleep(1.5)  # 入力後にReactのバリデーション・ボタン活性化を待つ
     elif kind == "select":
         element = wait_element(wait, action["selector"])
         Select(element).select_by_value(str(action_value(action)))
