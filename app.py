@@ -1,6 +1,7 @@
 import os
 import threading
 import time
+import base64
 
 from flask import Flask, jsonify, redirect, render_template_string, url_for
 from selenium import webdriver
@@ -23,11 +24,21 @@ state = {
     "action_index": 0,
     "action_total": len(ACTIONS),
     "history": [],
+    "screenshot": "", # スクショ保持用
 }
 
 def set_state(**values):
     with lock:
         state.update(values)
+
+def take_screenshot_b64():
+    if driver is not None:
+        try:
+            png = driver.get_screenshot_as_png()
+            return base64.b64encode(png).decode("utf-8")
+        except Exception:
+            pass
+    return ""
 
 def wait_element(selector, timeout=25):
     selectors = [s.strip() for s in selector.split(",")]
@@ -119,7 +130,8 @@ def run_action(browser, wait, action, index):
     elif kind == "scroll":
         browser.execute_script("window.scrollBy(0, arguments[0]);", action.get("y", 500))
     elif kind == "human":
-        set_state(status="waiting_for_human", message=action.get("message", "確認してください"))
+        b64 = take_screenshot_b64()
+        set_state(status="waiting_for_human", message=action.get("message", "確認してください"), screenshot=b64)
         resume_event.clear()
         resume_event.wait()
     else:
@@ -138,6 +150,7 @@ def browser_worker():
             "action_index": 0,
             "action_total": len(ACTIONS),
             "history": [],
+            "screenshot": "",
         }
 
     options = Options()
@@ -157,24 +170,18 @@ def browser_worker():
         for index, action in enumerate(ACTIONS, start=1):
             run_action(driver, wait, action, index)
 
-        set_state(status="waiting_for_human", current_action="自動操作完了", message="処理が完了しました")
+        b64 = take_screenshot_b64()
+        set_state(status="waiting_for_human", current_action="自動操作完了", message="処理が完了しました", screenshot=b64)
     except Exception as exc:
-        # エラーや検知で止まった場合、即死させずに一時停止モードへ逃がす
+        b64 = take_screenshot_b64()
         with lock:
             state.update(
                 status="waiting_for_human",
                 error=str(exc),
-                message="ボット検知またはタイムアウトにより一時停止しました。画面を確認してください。",
+                message="エラーまたはボット検知で一時停止しました。以下のスクショを確認してください。",
+                screenshot=b64,
             )
         record_progress(f"一時停止: {exc}")
-        # driverは終了させず保持する
-
-def completion_found():
-    if driver is None:
-        return False
-    if COMPLETION_URL_PART and COMPLETION_URL_PART in driver.current_url:
-        return True
-    return any(driver.find_elements(By.CSS_SELECTOR, selector) for selector in COMPLETION_SELECTORS)
 
 PAGE = """
 <!doctype html>
@@ -189,6 +196,8 @@ button{padding:.7rem 1rem;margin:.3rem 0;font-size:1rem}
 pre{white-space:pre-wrap;color:#b00020}
 .progress{padding:1rem;background:#f2f5f7;border-radius:8px;margin:1rem 0}
 .history{font-size:.9rem;background:#111;color:#eee;padding:1rem;border-radius:8px;max-height:220px;overflow:auto}
+.screenshot-box{margin:1rem 0;border:2px solid #ccc;border-radius:8px;padding:0.5rem;background:#fafafa}
+.screenshot-box img{width:100%;height:auto;border-radius:4px;display:block}
 </style>
 </head>
 <body>
@@ -199,8 +208,15 @@ pre{white-space:pre-wrap;color:#b00020}
   <span id="progress-count">{{ action_index }}/{{ action_total }}</span>
   <p id="status-message">{{ message }}</p>
 </div>
+
+<div class="screenshot-box" id="screenshot-container" style="display: {% if screenshot %}block{% else %}none{% endif %};">
+  <strong>停止時の画面スクショ:</strong>
+  <img id="screenshot-img" src="{% if screenshot %}data:image/png;base64,{{ screenshot }}{% endif %}" alt="スクショ">
+</div>
+
 <pre class="history" id="history">{% for item in history %}{{ item }}
 {% endfor %}</pre>
+
 {% if status in ["idle", "error"] %}
 <form method="post" action="{{ url_for('start') }}"><button>自動化を開始</button></form>
 {% endif %}
@@ -208,10 +224,8 @@ pre{white-space:pre-wrap;color:#b00020}
 <form method="post" action="{{ url_for('resume') }}"><button>操作を再開する</button></form>
 <form method="post" action="{{ url_for('finish') }}"><button>セッションを終了してリセット</button></form>
 {% endif %}
-{% if status == "completed" %}
-<form method="post" action="{{ url_for('finish') }}"><button>セッションを終了</button></form>
-{% endif %}
 {% if error %}<pre>{{ error }}</pre>{% endif %}
+
 <script>
 async function refreshStatus() {
   try {
@@ -222,6 +236,15 @@ async function refreshStatus() {
     document.getElementById("progress-count").textContent = `${data.action_index || 0}/${data.action_total || 0}`;
     document.getElementById("status-message").textContent = data.message || "";
     document.getElementById("history").textContent = (data.history || []).join("\\n");
+    
+    const container = document.getElementById("screenshot-container");
+    const img = document.getElementById("screenshot-img");
+    if (data.screenshot) {
+      img.src = "data:image/png;base64," + data.screenshot;
+      container.style.display = "block";
+    } else {
+      container.style.display = "none";
+    }
   } catch (error) {
     console.warn("更新失敗", error);
   }
@@ -269,6 +292,7 @@ def finish():
             "action_index": 0,
             "action_total": len(ACTIONS),
             "history": [],
+            "screenshot": "",
         }
     return redirect(url_for("index"))
 
