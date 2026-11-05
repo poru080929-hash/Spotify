@@ -33,10 +33,6 @@ def set_state(**values):
 
 
 def wait_element(selector, timeout=25):
-    """
-    カンマ区切りのセレクタを分解し、要素が出現するまで粘り強く探索する。
-    見つからない場合は例外を投げず、呼び出し元でフォールバックできるようにする。
-    """
     selectors = [s.strip() for s in selector.split(",")]
     start_time = time.time()
     while time.time() - start_time < timeout:
@@ -49,7 +45,7 @@ def wait_element(selector, timeout=25):
             except Exception:
                 pass
         time.sleep(0.5)
-    return None  # タイムアウト時はNoneを返す（即死させない）
+    return None
 
 
 def action_value(action):
@@ -105,7 +101,6 @@ def run_action(browser, wait, action, index):
     elif kind == "click":
         element = wait_element(action["selector"])
         if not element:
-            # 要素が見つからない場合、スクリプトを落とさず人間操作モードへ逃がす
             raise TimeoutError(f"要素が見つからないため一時停止します: {action['selector']}")
         browser.execute_script("arguments[0].click();", element)
         time.sleep(2.0)
@@ -164,10 +159,18 @@ def browser_worker():
         }
 
     options = Options()
+    # --- コンテナ環境でのクラッシュ・メモリ不足を完全に防ぐ最強安定化フラグ ---
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1280,720")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-infobars")
+    options.add_argument("--remote-debugging-port=9222")
+    options.add_argument("--disable-setuid-sandbox")
+    options.add_argument("--disable-dev-tools")
+    # -----------------------------------------------------------------
     options.binary_location = os.getenv("CHROMIUM_BINARY", "/usr/bin/chromium")
 
     try:
@@ -183,7 +186,6 @@ def browser_worker():
             message="画面を確認して、完了状態を確認してください",
         )
     except Exception as exc:
-        # 万が一エラーやタイムアウトが発生しても、ブラウザを落とさず人間操作モードに移行する
         with lock:
             state.update(
                 status="waiting_for_human",
