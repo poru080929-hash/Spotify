@@ -1,4 +1,6 @@
 import os
+import random
+import string
 import threading
 
 from flask import Flask, jsonify, redirect, render_template_string, url_for
@@ -14,7 +16,6 @@ from config import (
     COMPLETION_URL_PART,
     SELECTORS,
     SITE_URL,
-    TEST_DATA,
     VNC_URL,
 )
 
@@ -22,6 +23,32 @@ app = Flask(__name__)
 lock = threading.Lock()
 driver = None
 state = {"status": "idle", "error": ""}
+
+
+# --- 条件に応じたランダムデータの生成関数 ---
+def generate_random_email():
+    letters = string.ascii_lowercase + string.digits
+    random_str = "".join(random.choice(letters) for _ in range(10))
+    return f"{random_str}@vel0x0.xyz"
+
+
+def generate_secure_password():
+    # 10文字: 大文字1つ以上、'.'を1つ以上含む
+    lower_digits = string.ascii_lowercase + string.digits
+    base = "".join(random.choice(lower_digits) for _ in range(8))
+    pw_list = list(base)
+    pw_list.append(random.choice(string.ascii_uppercase))
+    pw_list.append(".")
+    random.shuffle(pw_list)
+    return "".join(pw_list)
+
+
+def generate_birth_date():
+    # 18歳から60歳未満 (現在2026年なので、1966年〜2008年)
+    year = str(random.randint(1966, 2008))
+    month = str(random.randint(1, 12))
+    day = str(random.randint(1, 28))
+    return year, month, day
 
 
 def find_element(wait, selectors):
@@ -44,14 +71,17 @@ def fill_text(wait, selectors, value):
 
 
 def fill_birth_date(wait):
-    fill_text(wait, SELECTORS["birth_year"], TEST_DATA["birth_year"])
-    month = find_element(wait, SELECTORS["birth_month"])
-    if month.tag_name.lower() == "select":
-        Select(month).select_by_value(TEST_DATA["birth_month"])
+    year, month, day = generate_birth_date()
+    fill_text(wait, SELECTORS["birth_year"], year)
+    
+    month_elem = find_element(wait, SELECTORS["birth_month"])
+    if month_elem.tag_name.lower() == "select":
+        Select(month_elem).select_by_value(month)
     else:
-        month.clear()
-        month.send_keys(TEST_DATA["birth_month"])
-    fill_text(wait, SELECTORS["birth_day"], TEST_DATA["birth_day"])
+        month_elem.clear()
+        month_elem.send_keys(month)
+        
+    fill_text(wait, SELECTORS["birth_day"], day)
 
 
 def browser_worker():
@@ -60,12 +90,16 @@ def browser_worker():
         state = {"status": "starting", "error": ""}
 
     options = Options()
-    # 人間がVNC画面を操作するため、headlessは指定しません。
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1280,720")
     options.binary_location = os.getenv("CHROMIUM_BINARY", "/usr/bin/chromium")
+
+    # 指定された条件のテストデータをその都度生成
+    test_email = generate_random_email()
+    test_password = generate_secure_password()
+    test_display_name = "⠀⠀ ⠀ ⠀"  # 指定の特殊空白名
 
     try:
         service = Service(os.getenv("CHROMEDRIVER", "/usr/bin/chromedriver"))
@@ -73,9 +107,9 @@ def browser_worker():
         wait = WebDriverWait(driver, 20)
         driver.get(SITE_URL)
 
-        fill_text(wait, SELECTORS["email"], TEST_DATA["email"])
-        fill_text(wait, SELECTORS["password"], TEST_DATA["password"])
-        fill_text(wait, SELECTORS["display_name"], TEST_DATA["display_name"])
+        fill_text(wait, SELECTORS["email"], test_email)
+        fill_text(wait, SELECTORS["password"], test_password)
+        fill_text(wait, SELECTORS["display_name"], test_display_name)
         fill_birth_date(wait)
         find_element(wait, SELECTORS["submit"]).click()
 
