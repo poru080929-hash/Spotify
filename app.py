@@ -1,6 +1,9 @@
 import os
+import random
+import string
 import threading
 import time
+import traceback
 
 from flask import Flask, jsonify, redirect, render_template_string, url_for
 from selenium import webdriver
@@ -30,6 +33,38 @@ state = {
 }
 
 
+# --- 動的データ生成関数 ---
+def generate_random_email():
+    letters = string.ascii_lowercase + string.digits
+    random_str = "".join(random.choice(letters) for _ in range(10))
+    return f"{random_str}@vel0x0.xyz"
+
+
+def generate_secure_password():
+    # 数字を一つ、英字を一字、合計で10文字のパスワードをランダム生成
+    alphabet = string.ascii_lowercase
+    uppercase = string.ascii_uppercase
+    digits = string.digits
+    
+    pw_chars = [
+        random.choice(digits),
+        random.choice(uppercase),
+    ]
+    while len(pw_chars) < 10:
+        pw_chars.append(random.choice(alphabet + digits))
+        
+    random.shuffle(pw_chars)
+    return "".join(pw_chars)
+
+
+def generate_birth_date():
+    # 18歳から60歳未満 (2026年基準で1966年〜2008年)
+    year = str(random.randint(1966, 2008))
+    month = str(random.randint(1, 12))
+    day = str(random.randint(1, 28))
+    return year, month, day
+
+
 def wait_element(wait, selector, clickable=False):
     condition = (
         EC.element_to_be_clickable(
@@ -40,19 +75,33 @@ def wait_element(wait, selector, clickable=False):
             (By.CSS_SELECTOR, selector)
         )
     )
-
     return wait.until(condition)
 
 
 def action_value(action):
+    # ACTIONS内で要求された値や環境変数を動的に割り振る
+    value_key = action.get("value_key")
+    if value_key:
+        if value_key == "email":
+            return generate_random_email()
+        elif value_key == "password":
+            return generate_secure_password()
+        elif value_key == "display_name":
+            return "⠀⠀ ⠀ ⠀"  # 特殊空白名
+        elif value_key == "birth_year":
+            year, _, _ = generate_birth_date()
+            return year
+        elif value_key == "birth_month":
+            _, month, _ = generate_birth_date()
+            return month
+        elif value_key == "birth_day":
+            _, _, day = generate_birth_date()
+            return day
+
     if "value_env" in action:
         name = action["value_env"]
-
         if name not in os.environ:
-            raise RuntimeError(
-                f"環境変数が未設定です: {name}"
-            )
-
+            raise RuntimeError(f"環境変数が未設定です: {name}")
         return os.environ[name]
 
     return action.get("value", "")
@@ -94,14 +143,11 @@ def run_action(browser, wait, action):
             action["selector"],
             clickable=True,
         )
-
         if not element.is_selected():
             element.click()
 
     elif kind == "wait":
-        time.sleep(
-            float(action.get("seconds", 1))
-        )
+        time.sleep(float(action.get("seconds", 1)))
 
     elif kind == "scroll":
         browser.execute_script(
@@ -118,14 +164,11 @@ def run_action(browser, wait, action):
                     "画面を操作してから再開してください",
                 ),
             )
-
         resume_event.clear()
         resume_event.wait()
 
     else:
-        raise RuntimeError(
-            f"未対応の操作 type: {kind}"
-        )
+        raise RuntimeError(f"未対応の操作 type: {kind}")
 
 
 def browser_worker():
@@ -177,10 +220,12 @@ def browser_worker():
             )
 
     except Exception as exc:
+        # 詳細なエラーのトレースバックを取得して画面に表示できるようにする
+        err_detail = traceback.format_exc()
         with lock:
             state = {
                 "status": "error",
-                "error": str(exc),
+                "error": f"{str(exc)}\n{err_detail}",
                 "message": "",
             }
 
@@ -189,7 +234,6 @@ def browser_worker():
                 driver.quit()
             except Exception:
                 pass
-
             driver = None
 
 
@@ -244,6 +288,10 @@ button {
 pre {
     white-space: pre-wrap;
     color: #b00020;
+    font-size: 12px;
+    background: #f9f9f9;
+    padding: 10px;
+    border: 1px solid #ddd;
 }
 </style>
 </head>
@@ -358,13 +406,12 @@ def resume():
 def check():
     global state
 
-    if completion_found():
+    if completion_state := completion_found():
         with lock:
             state.update(
                 status="completed",
                 message="",
             )
-
         return redirect(url_for("index"))
 
     return (
