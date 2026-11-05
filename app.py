@@ -24,7 +24,7 @@ state = {
     "action_index": 0,
     "action_total": len(ACTIONS),
     "history": [],
-    "screenshot": "", # スクショ保持用
+    "screenshot": "",
 }
 
 def set_state(**values):
@@ -173,6 +173,7 @@ def browser_worker():
         b64 = take_screenshot_b64()
         set_state(status="waiting_for_human", current_action="自動操作完了", message="処理が完了しました", screenshot=b64)
     except Exception as exc:
+        # --- 修正：ここで勝手にドライバを落とさず、スクショと状態を保持して停止させる ---
         b64 = take_screenshot_b64()
         with lock:
             state.update(
@@ -221,7 +222,6 @@ pre{white-space:pre-wrap;color:#b00020}
 <form method="post" action="{{ url_for('start') }}"><button>自動化を開始</button></form>
 {% endif %}
 {% if status == "waiting_for_human" %}
-<form method="post" action="{{ url_for('resume') }}"><button>操作を再開する</button></form>
 <form method="post" action="{{ url_for('finish') }}"><button>セッションを終了してリセット</button></form>
 {% endif %}
 {% if error %}<pre>{{ error }}</pre>{% endif %}
@@ -267,11 +267,6 @@ def start():
         if state["status"] in {"starting", "running", "waiting_for_human"}:
             return "すでに実行中です", 409
     threading.Thread(target=browser_worker, daemon=True).start()
-    return redirect(url_for("index"))
-
-@app.post("/resume")
-def resume():
-    resume_event.set()
     return redirect(url_for("index"))
 
 @app.post("/finish")
