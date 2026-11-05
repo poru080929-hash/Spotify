@@ -7,6 +7,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select, WebDriverWait
 
@@ -98,14 +99,20 @@ def run_action(browser, wait, action, index):
     elif kind == "click":
         element = wait_element(wait, action["selector"])
         browser.execute_script("arguments[0].click();", element)
+        time.sleep(1)
     elif kind == "fill":
         element = wait_element(wait, action["selector"])
         element.clear()
         element.send_keys(action_value(action))
-        time.sleep(1)  # 入力後に少しウェイトを入れてボタンの描画を待つ
+        # press_enterが指定されている場合はEnterキーを送信して次へ進む
+        if action.get("press_enter"):
+            element.send_keys(Keys.RETURN)
+        time.sleep(1.5)
     elif kind == "select":
         element = wait_element(wait, action["selector"])
         Select(element).select_by_value(str(action_value(action)))
+        if action.get("press_enter"):
+            element.send_keys(Keys.RETURN)
         time.sleep(1)
     elif kind == "check":
         element = wait_element(wait, action["selector"])
