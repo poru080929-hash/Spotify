@@ -33,11 +33,19 @@ def set_state(**values):
 
 
 def wait_element(wait, selector, clickable=False):
-    # タイムアウトを防ぐため、clickable判定ではなく存在確認(presence)をベースにしつつ安全に取得する
-    condition = (
-        EC.presence_of_element_located((By.CSS_SELECTOR, selector))
-    )
-    return wait.until(condition)
+    # カンマ区切りのセレクタ（例: "a[foo], b[bar]"）を個別に分割して安全に探索する
+    selectors = [s.strip() for s in selector.split(",")]
+    start_time = time.time()
+    while time.time() - start_time < 20:
+        for sel in selectors:
+            try:
+                elements = driver.find_elements(By.CSS_SELECTOR, sel)
+                if elements:
+                    return elements[0]
+            except Exception:
+                pass
+        time.sleep(0.5)
+    raise RuntimeError(f"要素が見つかりませんでした: {selector}")
 
 
 def action_value(action):
@@ -87,9 +95,8 @@ def run_action(browser, wait, action, index):
 
     if kind == "goto":
         browser.get(action["url"])
-        time.sleep(2) # ページ遷移後の読み込みを少し待つ
+        time.sleep(2)
     elif kind == "click":
-        # 要素を取得してJavaScriptで強制クリック（script timeout対策）
         element = wait_element(wait, action["selector"])
         browser.execute_script("arguments[0].click();", element)
     elif kind == "fill":
