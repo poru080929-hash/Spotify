@@ -32,10 +32,10 @@ def set_state(**values):
         state.update(values)
 
 
-def wait_element(selector, timeout=20):
+def wait_element(selector, timeout=25):
     """
-    カンマ区切りのセレクタを完全に分解し、
-    DOM上に要素が出現して操作可能（displayed）になるまで粘り強く安全に探索する最高精度の共通関数
+    カンマ区切りのセレクタを分解し、要素が出現するまで粘り強く探索する。
+    見つからない場合は例外を投げず、呼び出し元でフォールバックできるようにする。
     """
     selectors = [s.strip() for s in selector.split(",")]
     start_time = time.time()
@@ -49,7 +49,7 @@ def wait_element(selector, timeout=20):
             except Exception:
                 pass
         time.sleep(0.5)
-    raise RuntimeError(f"要素が見つかりませんでした: {selector}")
+    return None  # タイムアウト時はNoneを返す（即死させない）
 
 
 def action_value(action):
@@ -97,7 +97,6 @@ def run_action(browser, wait, action, index):
     )
     record_progress(f"開始 {description}")
 
-    # すべてのアクションの前に少しだけマージンを置き、非同期描画のズレを完全にシャットアウト
     time.sleep(1.0)
 
     if kind == "goto":
@@ -105,20 +104,29 @@ def run_action(browser, wait, action, index):
         time.sleep(2.5)
     elif kind == "click":
         element = wait_element(action["selector"])
+        if not element:
+            # 要素が見つからない場合、スクリプトを落とさず人間操作モードへ逃がす
+            raise TimeoutError(f"要素が見つからないため一時停止します: {action['selector']}")
         browser.execute_script("arguments[0].click();", element)
-        time.sleep(2.0)  # クリック後の画面遷移・次画面ロードを確実に待つ
+        time.sleep(2.0)
     elif kind == "fill":
         element = wait_element(action["selector"])
+        if not element:
+            raise TimeoutError(f"入力欄が見つからないため一時停止します: {action['selector']}")
         element.clear()
         time.sleep(0.3)
         element.send_keys(action_value(action))
-        time.sleep(1.5)  # 入力後のバリデーション・ボタン活性化を確実に待つ
+        time.sleep(1.5)
     elif kind == "select":
         element = wait_element(action["selector"])
+        if not element:
+            raise TimeoutError(f"選択ボックスが見つからないため一時停止します: {action['selector']}")
         Select(element).select_by_value(str(action_value(action)))
         time.sleep(1.5)
     elif kind == "check":
         element = wait_element(action["selector"])
+        if not element:
+            raise TimeoutError(f"チェックボックスが見つからないため一時停止します: {action['selector']}")
         if not element.is_selected():
             browser.execute_script("arguments[0].click();", element)
         time.sleep(1.0)
@@ -175,18 +183,14 @@ def browser_worker():
             message="画面を確認して、完了状態を確認してください",
         )
     except Exception as exc:
+        # 万が一エラーやタイムアウトが発生しても、ブラウザを落とさず人間操作モードに移行する
         with lock:
             state.update(
-                status="error",
+                status="waiting_for_human",
                 error=str(exc),
-                message="操作中にエラーが発生しました",
+                message="自動処理が一時停止しました。noVNC画面から手動で操作を続けてください。",
             )
-        if driver is not None:
-            try:
-                driver.quit()
-            except Exception:
-                pass
-            driver = None
+        record_progress(f"一時停止: {exc}")
 
 
 def completion_found():
