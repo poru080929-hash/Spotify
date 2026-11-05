@@ -90,13 +90,13 @@ def run_action(browser, wait, action, index):
     elif kind == "click":
         element = wait_element(action["selector"])
         if not element:
-            raise TimeoutError(f"要素が見つかりません: {action['selector']}")
+            raise TimeoutError(f"要素が見つかりません（ボット検知の可能性があります）: {action['selector']}")
         browser.execute_script("arguments[0].click();", element)
         time.sleep(2.0)
     elif kind == "fill":
         element = wait_element(action["selector"])
         if not element:
-            raise TimeoutError(f"入力欄が見つかりません: {action['selector']}")
+            raise TimeoutError(f"入力欄が見つかりません（ボット検知の可能性があります）: {action['selector']}")
         element.clear()
         time.sleep(0.3)
         element.send_keys(action_value(action))
@@ -159,15 +159,15 @@ def browser_worker():
 
         set_state(status="waiting_for_human", current_action="自動操作完了", message="処理が完了しました")
     except Exception as exc:
+        # エラーや検知で止まった場合、即死させずに一時停止モードへ逃がす
         with lock:
-            state.update(status="error", error=str(exc), message="エラーが発生しました")
-        record_progress(f"エラー: {exc}")
-        if driver is not None:
-            try:
-                driver.quit()
-            except Exception:
-                pass
-            driver = None
+            state.update(
+                status="waiting_for_human",
+                error=str(exc),
+                message="ボット検知またはタイムアウトにより一時停止しました。画面を確認してください。",
+            )
+        record_progress(f"一時停止: {exc}")
+        # driverは終了させず保持する
 
 def completion_found():
     if driver is None:
@@ -205,7 +205,11 @@ pre{white-space:pre-wrap;color:#b00020}
 <form method="post" action="{{ url_for('start') }}"><button>自動化を開始</button></form>
 {% endif %}
 {% if status == "waiting_for_human" %}
+<form method="post" action="{{ url_for('resume') }}"><button>操作を再開する</button></form>
 <form method="post" action="{{ url_for('finish') }}"><button>セッションを終了してリセット</button></form>
+{% endif %}
+{% if status == "completed" %}
+<form method="post" action="{{ url_for('finish') }}"><button>セッションを終了</button></form>
 {% endif %}
 {% if error %}<pre>{{ error }}</pre>{% endif %}
 <script>
@@ -240,6 +244,11 @@ def start():
         if state["status"] in {"starting", "running", "waiting_for_human"}:
             return "すでに実行中です", 409
     threading.Thread(target=browser_worker, daemon=True).start()
+    return redirect(url_for("index"))
+
+@app.post("/resume")
+def resume():
+    resume_event.set()
     return redirect(url_for("index"))
 
 @app.post("/finish")
