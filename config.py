@@ -1,69 +1,40 @@
 import os
 
-# あなたが管理するテストサイトの登録ページ
-SITE_URL = os.getenv("SITE_URL", "netflix-jp.vel0x0.xyz/Yomi0929")
-
-# noVNCの公開URL。ローカルDockerなら通常この値で動作します。
+# ここから下だけを変更すれば、操作手順を変更できます。
+SITE_URL = os.getenv("SITE_URL", "https://example.test/")
 VNC_URL = os.getenv(
     "VNC_URL",
     "http://localhost:6080/vnc.html?autoconnect=true&resize=scale",
 )
 
-# HTMLの構造に合わせて、候補セレクタを上から順に追加できます。
-SELECTORS = {
-    "email": [
-        "input#email",
-        "input[name='email']",
-        "input[type='email']",
-    ],
-    "password": [
-        "input#password",
-        "input[name='password']",
-        "input[type='password']",
-    ],
-    "display_name": [
-        "input#displayName",
-        "input[name='displayName']",
-        "input[name='display_name']",
-        "input[name='name']",
-    ],
-    "birth_year": [
-        "input#year",
-        "input[name='year']",
-        "input[name='birth_year']",
-    ],
-    "birth_month": [
-        "select#month",
-        "select[name='month']",
-        "input#month",
-        "input[name='month']",
-        "input[name='birth_month']",
-    ],
-    "birth_day": [
-        "input#day",
-        "input[name='day']",
-        "input[name='birth_day']",
-    ],
-    "submit": [
-        "button[type='submit']",
-        "input[type='submit']",
-        "button[data-testid='submit']",
-    ],
-}
+# type は goto / click / fill / select / check / wait / scroll / human
+# selector は CSS セレクタです。
+# value_env を使うと、入力値を環境変数から読み込みます。
+ACTIONS = [
+    {"type": "goto", "url": SITE_URL},
+    # {"type": "click", "selector": "button#start"},
+    # {"type": "fill", "selector": "input[name='email']", "value_env": "TEST_EMAIL"},
+    # {"type": "fill", "selector": "input[name='password']", "value_env": "TEST_PASSWORD"},
+    # {"type": "select", "selector": "select[name='country']", "value": "JP"},
+    # {"type": "check", "selector": "input[name='terms']"},
+    # {"type": "wait", "seconds": 2},
+    # {"type": "scroll", "y": 500},
+    # {"type": "human", "message": "画面を確認してください"},
+]
 
-# テスト用データ。環境変数から後で差し替えられます。
-TEST_DATA = {
-    "email": os.getenv("TEST_EMAIL", "test@example.test"),
-    "password": os.getenv("TEST_PASSWORD", "ChangeMe-Only-For-Testing"),
-    "display_name": os.getenv("TEST_DISPLAY_NAME", "Test User"),
-    "birth_year": os.getenv("TEST_BIRTH_YEAR", "1990"),
-    "birth_month": os.getenv("TEST_BIRTH_MONTH", "5"),
-    "birth_day": os.getenv("TEST_BIRTH_DAY", "15"),
-}
-
-# 自分のサイトの完了条件を後から追加できます。
+# 管理下テストサイトで使う完了条件
 COMPLETION_SELECTORS = [
     "[data-testid='signup-complete']",
     "#signup-complete",
 ]
 COMPLETION_URL_PART = os.getenv("COMPLETION_URL_PART", "/signup/complete")
+
+# 後方互換用。ACTIONSでvalue_envを使うことを推奨します。
+TEST_DATA = {
+    "email": os.getenv("TEST_EMAIL", "test@example.test"),
+    "password": os.getenv("TEST_PASSWORD", "only-for-local-testing"),
+    "display_name": os.getenv("TEST_DISPLAY_NAME", "Test User"),
+    "birth_year": os.getenv("TEST_BIRTH_YEAR", "1990"),
+    "birth_month": os.getenv("TEST_BIRTH_MONTH", "5"),
+    "birth_day": os.getenv("TEST_BIRTH_DAY", "15"),
+}
