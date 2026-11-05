@@ -2,7 +2,7 @@ import os
 import random
 import string
 
-# noVNCのURL（Render環境やローカル環境に合わせて調整）
+# noVNCのURL
 VNC_URL = os.getenv("VNC_URL", "http://localhost:6080/vnc.html")
 
 # 完了判定用のURLパーツやCSSセレクタ
@@ -51,8 +51,8 @@ ACTIONS = [
     # 1. SpotifyのLPへ移動
     {"type": "goto", "url": "https://www.spotify.com/jp/premium/"},
     
-    # 2. 1ヶ月無料体験ボタンをクリック
-    {"type": "click", "selector": "a[aria-label*='Premium Standardの購入画面に進みます'], a[href*='purchase/offer'], a[data-testid='signup-btn-link']"},
+    # 2. 1ヶ月無料体験ボタンをクリック（安定性を高めたセレクタ）
+    {"type": "click", "selector": "a[data-testid='signup-btn-link'], a[href*='purchase/offer']"},
     
     # 3. メールアドレス入力 & 次へ
     {"type": "fill", "selector": "input#username, input[name='username']", "value": current_email},
