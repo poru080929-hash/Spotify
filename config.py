@@ -46,7 +46,7 @@ current_password = generate_secure_password()
 current_name = get_special_display_name()
 birth_y, birth_m, birth_d = generate_random_birthdate()
 
-# 自動化アクションの定義配列（最初に順調に進んでいたシンプルな構成）
+# 自動化アクションの定義配列
 ACTIONS = [
     # 1. SpotifyのLPへ移動
     {"type": "goto", "url": "https://www.spotify.com/jp/premium/"},
@@ -56,22 +56,22 @@ ACTIONS = [
     
     # 3. メールアドレス入力 & 次へ
     {"type": "fill", "selector": "input#username, input[name='username']", "value": current_email},
-    {"type": "click", "selector": "button[data-testid='submit']"},
+    {"type": "click", "selector": "button[data-testid='submit'], button[type='submit']"},
     
     # 4. パスワード入力 & 次へ
-    {"type": "fill", "selector": "input#new-password, input[name='new-password']", "value": current_password},
-    {"type": "click", "selector": "button[data-testid='submit']"},
+    {"type": "fill", "selector": "input#new-password, input[name='new-password'], input[data-testid='password']", "value": current_password},
+    {"type": "click", "selector": "button[data-testid='submit'], button[type='submit']"},
     
     # 5. 名前入力 & 次へ
     {"type": "fill", "selector": "input#displayName, input[name='displayName']", "value": current_name},
-    {"type": "click", "selector": "button[data-testid='submit']"},
+    {"type": "click", "selector": "button[data-testid='submit'], button[type='submit']"},
     
-    # 6-8. 生年月日入力 (年・月・日) & 次へ
+    # 6. 生年月日入力 (年・月・日) & 次へ
     {"type": "fill", "selector": "input#year, input[name='year'], input[data-testid='birthDateYear']", "value": birth_y},
     {"type": "select", "selector": "select#month, select[name='month'], select[data-testid='birthDateMonth']", "value": birth_m},
     {"type": "fill", "selector": "input#day, input[name='day'], input[data-testid='birthDateDay']", "value": birth_d},
-    {"type": "click", "selector": "button[data-testid='submit']"},
+    {"type": "click", "selector": "button[data-testid='submit'], button[type='submit']"},
     
-    # 9. 最終的な登録確認や人間による操作の補助
+    # 7. 最終的な登録確認や人間による操作の補助
     {"type": "human", "message": "性別選択、利用規約チェック、最後の「登録する」ボタンを確認してください。"}
 ]
