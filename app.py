@@ -33,7 +33,6 @@ def set_state(**values):
 
 
 def wait_element(wait, selector, clickable=False):
-    # カンマ区切りのセレクタ（例: "a[foo], b[bar]"）を個別に分割して安全に探索する
     selectors = [s.strip() for s in selector.split(",")]
     start_time = time.time()
     while time.time() - start_time < 20:
@@ -103,9 +102,11 @@ def run_action(browser, wait, action, index):
         element = wait_element(wait, action["selector"])
         element.clear()
         element.send_keys(action_value(action))
+        time.sleep(1)  # 入力後に少しウェイトを入れてボタンの描画を待つ
     elif kind == "select":
         element = wait_element(wait, action["selector"])
         Select(element).select_by_value(str(action_value(action)))
+        time.sleep(1)
     elif kind == "check":
         element = wait_element(wait, action["selector"])
         if not element.is_selected():
