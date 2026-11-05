@@ -54,29 +54,32 @@ ACTIONS = [
     # 2. 1ヶ月無料体験ボタンをクリック
     {"type": "click", "selector": "a[data-testid='signup-btn-link'], a[href*='purchase/offer']"},
     
-    # 3. メールアドレス入力（Enter送信）
-    {"type": "fill", "selector": "input#username, input[name='username']", "value": current_email, "press_enter": True},
+    # 3. メールアドレス入力
+    {"type": "fill", "selector": "input#username, input[name='username']", "value": current_email},
     
-    # 4. 画面遷移のロード待ち
+    # 4. 「次へ」ボタンを明示的にクリックして画面遷移させる
+    {"type": "click", "selector": "button[data-testid='submit']"},
+    
+    # 5. パスワード入力画面のロード待ち
     {"type": "wait", "seconds": 3},
     
-    # 5. パスワード入力（確実な type='password' 指定 & Enter送信）
-    {"type": "fill", "selector": "input[type='password']", "value": current_password, "press_enter": True},
+    # 6. パスワード入力（複数の候補セレクタで確実に捉える & Enter送信）
+    {"type": "fill", "selector": "input[data-testid='password'], input[data-testid='new-password'], input[type='password']", "value": current_password, "press_enter": True},
     
-    # 6. 画面遷移のロード待ち
+    # 7. 画面遷移のロード待ち
     {"type": "wait", "seconds": 3},
     
-    # 7. 名前入力（Enter送信）
+    # 8. 名前入力（Enter送信）
     {"type": "fill", "selector": "input#displayName, input[name='displayName']", "value": current_name, "press_enter": True},
     
-    # 8. 画面遷移のロード待ち
+    # 9. 画面遷移のロード待ち
     {"type": "wait", "seconds": 3},
     
-    # 9-11. 生年月日入力 (年・月・日)
+    # 10-12. 生年月日入力 (年・月・日)
     {"type": "fill", "selector": "input#year, input[name='year'], input[data-testid='birthDateYear']", "value": birth_y},
     {"type": "select", "selector": "select#month, select[name='month'], select[data-testid='birthDateMonth']", "value": birth_m},
     {"type": "fill", "selector": "input#day, input[name='day'], input[data-testid='birthDateDay']", "value": birth_d, "press_enter": True},
     
-    # 12. 最終的な登録確認や人間による操作の補助
+    # 13. 最終的な登録確認や人間による操作の補助
     {"type": "human", "message": "性別選択、利用規約チェック、最後の「登録する」ボタンを確認してください。"}
 ]
