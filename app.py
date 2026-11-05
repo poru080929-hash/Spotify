@@ -32,20 +32,20 @@ def set_state(**values):
         state.update(values)
 
 
-def wait_element(wait, selector, clickable=False):
-    # カンマ区切りのセレクタを分解して安全に探索
+def wait_element(selector, timeout=20):
+    """
+    カンマ区切りのセレクタを完全に分解し、
+    DOM上に要素が出現して操作可能（displayed）になるまで粘り強く安全に探索する最高精度の共通関数
+    """
     selectors = [s.strip() for s in selector.split(",")]
     start_time = time.time()
-    while time.time() - start_time < 20:
+    while time.time() - start_time < timeout:
         for sel in selectors:
             try:
                 elements = driver.find_elements(By.CSS_SELECTOR, sel)
-                if elements:
-                    # 見つかった要素が表示状態（is_displayed）になるのを確認して返す
-                    for el in elements:
-                        if el.is_displayed():
-                            return el
-                    return elements[0]
+                for el in elements:
+                    if el.is_displayed():
+                        return el
             except Exception:
                 pass
         time.sleep(0.5)
@@ -97,26 +97,31 @@ def run_action(browser, wait, action, index):
     )
     record_progress(f"開始 {description}")
 
+    # すべてのアクションの前に少しだけマージンを置き、非同期描画のズレを完全にシャットアウト
+    time.sleep(1.0)
+
     if kind == "goto":
         browser.get(action["url"])
-        time.sleep(2)
+        time.sleep(2.5)
     elif kind == "click":
-        element = wait_element(wait, action["selector"])
+        element = wait_element(action["selector"])
         browser.execute_script("arguments[0].click();", element)
-        time.sleep(1.5)  # クリック後の画面遷移待機
+        time.sleep(2.0)  # クリック後の画面遷移・次画面ロードを確実に待つ
     elif kind == "fill":
-        element = wait_element(wait, action["selector"])
+        element = wait_element(action["selector"])
         element.clear()
+        time.sleep(0.3)
         element.send_keys(action_value(action))
-        time.sleep(1.5)  # 入力後にReactのバリデーション・ボタン活性化を待つ
+        time.sleep(1.5)  # 入力後のバリデーション・ボタン活性化を確実に待つ
     elif kind == "select":
-        element = wait_element(wait, action["selector"])
+        element = wait_element(action["selector"])
         Select(element).select_by_value(str(action_value(action)))
-        time.sleep(1)
+        time.sleep(1.5)
     elif kind == "check":
-        element = wait_element(wait, action["selector"])
+        element = wait_element(action["selector"])
         if not element.is_selected():
             browser.execute_script("arguments[0].click();", element)
+        time.sleep(1.0)
     elif kind == "wait":
         time.sleep(float(action.get("seconds", 1)))
     elif kind == "scroll":
