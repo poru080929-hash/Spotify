@@ -7,7 +7,6 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select, WebDriverWait
 
@@ -34,6 +33,7 @@ def set_state(**values):
 
 
 def wait_element(wait, selector, clickable=False):
+    # カンマ区切りのセレクタ（例: "a[foo], b[bar]"）を個別に分割して安全に探索する
     selectors = [s.strip() for s in selector.split(",")]
     start_time = time.time()
     while time.time() - start_time < 20:
@@ -97,6 +97,7 @@ def run_action(browser, wait, action, index):
         browser.get(action["url"])
         time.sleep(2)
     elif kind == "click":
+        # 要素を取得してJavaScriptで強制クリック（script timeout対策）
         element = wait_element(wait, action["selector"])
         browser.execute_script("arguments[0].click();", element)
         time.sleep(1)
@@ -104,15 +105,10 @@ def run_action(browser, wait, action, index):
         element = wait_element(wait, action["selector"])
         element.clear()
         element.send_keys(action_value(action))
-        # press_enterが指定されている場合はEnterキーを送信して次へ進む
-        if action.get("press_enter"):
-            element.send_keys(Keys.RETURN)
-        time.sleep(1.5)
+        time.sleep(1)
     elif kind == "select":
         element = wait_element(wait, action["selector"])
         Select(element).select_by_value(str(action_value(action)))
-        if action.get("press_enter"):
-            element.send_keys(Keys.RETURN)
         time.sleep(1)
     elif kind == "check":
         element = wait_element(wait, action["selector"])
