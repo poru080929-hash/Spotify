@@ -54,16 +54,19 @@ ACTIONS = [
     # 2. 1ヶ月無料体験ボタンをクリック
     {"type": "click", "selector": "a[data-testid='signup-btn-link'], a[href*='purchase/offer']"},
     
-    # 3. メールアドレス入力（Enter送信付きでボタンクリックを兼ねる）
+    # 3. メールアドレス入力（Enter送信）
     {"type": "fill", "selector": "input#username, input[name='username']", "value": current_email, "press_enter": True},
     
-    # 4. パスワード入力（Enter送信付き）
+    # 4. 画面遷移のロードを挟んでからパスワード入力
+    {"type": "wait", "seconds": 2},
     {"type": "fill", "selector": "input#new-password, input[name='new-password']", "value": current_password, "press_enter": True},
     
-    # 5. 名前入力（Enter送信付き）
+    # 5. 画面遷移のロードを挟んでから名前入力
+    {"type": "wait", "seconds": 2},
     {"type": "fill", "selector": "input#displayName, input[name='displayName']", "value": current_name, "press_enter": True},
     
     # 6. 生年月日入力 (年・月・日)
+    {"type": "wait", "seconds": 2},
     {"type": "fill", "selector": "input#year, input[name='year'], input[data-testid='birthDateYear']", "value": birth_y},
     {"type": "select", "selector": "select#month, select[name='month'], select[data-testid='birthDateMonth']", "value": birth_m},
     {"type": "fill", "selector": "input#day, input[name='day'], input[data-testid='birthDateDay']", "value": birth_d, "press_enter": True},
