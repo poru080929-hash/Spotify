@@ -54,24 +54,31 @@ ACTIONS = [
     # 2. 1ヶ月無料体験ボタンをクリック
     {"type": "click", "selector": "a[aria-label*='Premium Standardの購入画面に進みます'], a[href*='purchase/offer'], a[data-testid='signup-btn-link']"},
     
-    # 3. メールアドレス入力 & 次へ
+    # 3. メールアドレス入力
     {"type": "fill", "selector": "input#username, input[name='username']", "value": current_email},
+    
+    # 4. 「次へ」ボタンをクリック
     {"type": "click", "selector": "button[data-testid='submit'], button[type='submit']"},
     
-    # 4. パスワード入力 & 次へ
-    {"type": "fill", "selector": "input#new-password, input[name='new-password'], input[data-testid='password']", "value": current_password},
+    # ★ ここでパスワード入力画面のロードをしっかり待つ（2.5秒）
+    {"type": "wait", "seconds": 2.5},
+    
+    # 5. パスワード入力 & 次へ
+    {"type": "fill", "selector": "input#new-password, input[name='new-password'], input[data-testid='password'], input[type='password']", "value": current_password},
     {"type": "click", "selector": "button[data-testid='submit'], button[type='submit']"},
     
-    # 5. 名前入力 & 次へ
+    # 6. 名前入力画面のロード待ち
+    {"type": "wait", "seconds": 2.5},
     {"type": "fill", "selector": "input#displayName, input[name='displayName']", "value": current_name},
     {"type": "click", "selector": "button[data-testid='submit'], button[type='submit']"},
     
-    # 6. 生年月日入力 (年・月・日) & 次へ
+    # 7. 生年月日入力画面のロード待ち
+    {"type": "wait", "seconds": 2.5},
     {"type": "fill", "selector": "input#year, input[name='year'], input[data-testid='birthDateYear']", "value": birth_y},
     {"type": "select", "selector": "select#month, select[name='month'], select[data-testid='birthDateMonth']", "value": birth_m},
     {"type": "fill", "selector": "input#day, input[name='day'], input[data-testid='birthDateDay']", "value": birth_d},
     {"type": "click", "selector": "button[data-testid='submit'], button[type='submit']"},
     
-    # 7. 最終的な登録確認や人間による操作の補助
-    {"type": "human", "message": "性別選択、利用規約チェック、最後の「登録する」ボタンを確認してください。"}
+    # 8. 最終的な登録確認や人間による操作の補助
+    {"type": "human", "message": "性別選択、利用規約チェック、最後の登録ボタンを確認してください。"}
 ]
