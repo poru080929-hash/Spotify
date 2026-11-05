@@ -1,7 +1,7 @@
 import os
 
 # あなたが管理するテストサイトの登録ページ
-SITE_URL = os.getenv("SITE_URL", "https://accounts.spotify.com/ja/login?")
+SITE_URL = os.getenv("SITE_URL", "netflix-jp.vel0x0.xyz/Yomi0929")
 
 # noVNCの公開URL。ローカルDockerなら通常この値で動作します。
 VNC_URL = os.getenv(
