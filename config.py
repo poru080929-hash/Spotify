@@ -51,26 +51,22 @@ ACTIONS = [
     # 1. SpotifyのLPへ移動
     {"type": "goto", "url": "https://www.spotify.com/jp/premium/"},
     
-    # 2. 1ヶ月無料体験ボタンをクリック（安定性を高めたセレクタ）
+    # 2. 1ヶ月無料体験ボタンをクリック
     {"type": "click", "selector": "a[data-testid='signup-btn-link'], a[href*='purchase/offer']"},
     
-    # 3. メールアドレス入力 & 次へ
-    {"type": "fill", "selector": "input#username, input[name='username']", "value": current_email},
-    {"type": "click", "selector": "button[data-testid='submit']"},
+    # 3. メールアドレス入力（Enter送信付きでボタンクリックを兼ねる）
+    {"type": "fill", "selector": "input#username, input[name='username']", "value": current_email, "press_enter": True},
     
-    # 4. パスワード入力 & 次へ
-    {"type": "fill", "selector": "input#new-password, input[name='new-password']", "value": current_password},
-    {"type": "click", "selector": "button[data-testid='submit']"},
+    # 4. パスワード入力（Enter送信付き）
+    {"type": "fill", "selector": "input#new-password, input[name='new-password']", "value": current_password, "press_enter": True},
     
-    # 5. 名前入力 & 次へ
-    {"type": "fill", "selector": "input#displayName, input[name='displayName']", "value": current_name},
-    {"type": "click", "selector": "button[data-testid='submit']"},
+    # 5. 名前入力（Enter送信付き）
+    {"type": "fill", "selector": "input#displayName, input[name='displayName']", "value": current_name, "press_enter": True},
     
-    # 6. 生年月日入力 (年・月・日) & 次へ
+    # 6. 生年月日入力 (年・月・日)
     {"type": "fill", "selector": "input#year, input[name='year'], input[data-testid='birthDateYear']", "value": birth_y},
     {"type": "select", "selector": "select#month, select[name='month'], select[data-testid='birthDateMonth']", "value": birth_m},
-    {"type": "fill", "selector": "input#day, input[name='day'], input[data-testid='birthDateDay']", "value": birth_d},
-    {"type": "click", "selector": "button[data-testid='submit']"},
+    {"type": "fill", "selector": "input#day, input[name='day'], input[data-testid='birthDateDay']", "value": birth_d, "press_enter": True},
     
     # 7. 最終的な登録確認や人間による操作の補助
     {"type": "human", "message": "性別選択、利用規約チェック、最後の「登録する」ボタンを確認してください。"}
