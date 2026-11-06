@@ -110,9 +110,11 @@ def run_action(browser, action, index):
     time.sleep(1.0)
 
     if kind == "goto":
-        browser.get(action["url"])
+        try:
+            browser.get(action["url"])
+        except Exception as exc:
+            record_progress(f"ページ読み込み警告: {exc}")
         time.sleep(float(action.get("after_wait", 2.5)))
-
     elif kind == "click":
         element = wait_element(
             action["selector"],
@@ -220,6 +222,7 @@ def browser_worker():
     chromedriver_binary = os.getenv("CHROMEDRIVER", "/usr/bin/chromedriver")
 
     options = Options()
+    options.page_load_strategy = "eager"
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
@@ -248,6 +251,8 @@ def browser_worker():
             log_output="/tmp/chromedriver.log",
         )
         driver = webdriver.Chrome(service=service, options=options)
+        driver.set_page_load_timeout(45)
+        driver.set_script_timeout(30)
         wait = WebDriverWait(driver, 20)
 
         for index, action in enumerate(ACTIONS, start=1):
