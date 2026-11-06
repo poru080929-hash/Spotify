@@ -1,6 +1,7 @@
 import base64
 import os
 import subprocess
+import tempfile
 import threading
 import time
 
@@ -9,6 +10,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select, WebDriverWait
 
 from config import ACTIONS
@@ -52,24 +54,6 @@ def take_screenshot_b64():
     return ""
 
 
-def wait_element(selector, timeout=25):
-    selectors = [item.strip() for item in selector.split(",")]
-    start_time = time.time()
-
-    while time.time() - start_time < timeout:
-        for css_selector in selectors:
-            try:
-                elements = driver.find_elements(By.CSS_SELECTOR, css_selector)
-                for element in elements:
-                    if element.is_displayed():
-                        return element
-            except Exception:
-                pass
-        time.sleep(0.5)
-
-    return None
-
-
 def action_value(action):
     if "value_env" in action:
         name = action["value_env"]
@@ -110,45 +94,90 @@ def run_action(browser, action, index):
     time.sleep(1.0)
 
     if kind == "goto":
+        # 1. ページ読み込み失敗時は例外を握りつぶさず確実にストップさせる
         try:
             browser.get(action["url"])
         except Exception as exc:
-            record_progress(f"ページ読み込み警告: {exc}")
+            raise RuntimeError(f"対象ページの読み込みに失敗しました: {exc}")
+
+        # 2. document.readyState が interactive または complete になるまで確実に待機
+        try:
+            WebDriverWait(browser, 30).until(
+                lambda d: d.execute_script("return document.readyState") in ("interactive", "complete")
+            )
+        except Exception as exc:
+            raise RuntimeError(f"ページのDOM初期化が完了しませんでした: {exc}")
+
         time.sleep(float(action.get("after_wait", 2.5)))
+
     elif kind == "click":
-        element = wait_element(
-            action["selector"],
-            timeout=float(action.get("timeout", 25)),
-        )
+        # 3. カンマ区切りセレクタを考慮しつつ、クリック可能になるまで最大30秒明示的に待機
+        timeout = float(action.get("timeout", 30))
+        raw_selector = action["selector"]
+        selectors = [s.strip() for s in raw_selector.split(",")]
+        
+        element = None
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            for sel in selectors:
+                try:
+                    el = WebDriverWait(browser, 2).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, sel))
+                    )
+                    if el:
+                        element = el
+                        break
+                except Exception:
+                    pass
+            if element:
+                break
+            time.sleep(0.5)
+
         if not element:
             if action.get("optional", False):
-                record_progress(
-                    f"任意要素が見つからないためスキップ: {action['selector']}"
-                )
+                record_progress(f"任意要素が見つからないためスキップ: {raw_selector}")
                 return
             raise TimeoutError(
-                "要素が見つかりません（ボット検知やモーダルの可能性があります）: "
-                f"{action['selector']}"
+                f"クリック対象の要素が見つからないかクリック可能です（ボット検知や読み込み不足の可能性があります）: {raw_selector}"
             )
+
         browser.execute_script("arguments[0].click();", element)
         time.sleep(float(action.get("after_wait", 2.0)))
 
     elif kind == "fill":
-        element = wait_element(
-            action["selector"],
-            timeout=float(action.get("timeout", 25)),
-        )
+        timeout = float(action.get("timeout", 30))
+        raw_selector = action["selector"]
+        selectors = [s.strip() for s in raw_selector.split(",")]
+        
+        element = None
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            for sel in selectors:
+                try:
+                    el = WebDriverWait(browser, 2).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, sel))
+                    )
+                    if el and el.is_displayed():
+                        element = el
+                        break
+                except Exception:
+                    pass
+            if element:
+                break
+            time.sleep(0.5)
+
         if not element:
-            raise TimeoutError(f"入力欄が見つかりません: {action['selector']}")
+            raise TimeoutError(f"入力欄が見つかりません: {raw_selector}")
+
         element.clear()
         time.sleep(0.3)
         element.send_keys(action_value(action))
         time.sleep(float(action.get("after_wait", 1.5)))
 
     elif kind == "select":
-        element = wait_element(
-            action["selector"],
-            timeout=float(action.get("timeout", 25)),
+        timeout = float(action.get("timeout", 30))
+        element = WebDriverWait(browser, timeout).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, action["selector"]))
         )
         if not element:
             raise TimeoutError(f"選択ボックスが見つかりません: {action['selector']}")
@@ -156,9 +185,9 @@ def run_action(browser, action, index):
         time.sleep(float(action.get("after_wait", 1.5)))
 
     elif kind == "check":
-        element = wait_element(
-            action["selector"],
-            timeout=float(action.get("timeout", 25)),
+        timeout = float(action.get("timeout", 30))
+        element = WebDriverWait(browser, timeout).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, action["selector"]))
         )
         if not element:
             raise TimeoutError(f"チェックボックスが見つかりません: {action['selector']}")
@@ -170,10 +199,7 @@ def run_action(browser, action, index):
         time.sleep(float(action.get("seconds", 1)))
 
     elif kind == "scroll":
-        browser.execute_script(
-            "window.scrollBy(0, arguments[0]);",
-            action.get("y", 500),
-        )
+        browser.execute_script("window.scrollBy(0, arguments[0]);", action.get("y", 500))
 
     elif kind == "human":
         screenshot = take_screenshot_b64()
@@ -222,7 +248,8 @@ def browser_worker():
     chromedriver_binary = os.getenv("CHROMEDRIVER", "/usr/bin/chromedriver")
 
     options = Options()
-    options.page_load_strategy = "eager"
+    # 4. eager を見直し、確実な読み込みを行うため normal に変更
+    options.page_load_strategy = "normal"
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
@@ -235,25 +262,24 @@ def browser_worker():
     options.add_argument("--disable-background-networking")
     options.add_argument("--disable-features=Translate,BackForwardCache")
     options.add_argument("--window-size=1280,720")
-    options.add_argument("--user-data-dir=/tmp/selenium-profile")
+    
+    # 5. 固定プロファイルによる競合を防ぐため、毎回一意の一時ディレクトリを使用
+    profile_dir = tempfile.mkdtemp(prefix="selenium-profile-")
+    options.add_argument(f"--user-data-dir={profile_dir}")
+    
     options.binary_location = chromium_binary
 
     try:
-        record_progress(
-            f"Chromium: {command_version([chromium_binary, '--version'])}"
-        )
-        record_progress(
-            f"ChromeDriver: {command_version([chromedriver_binary, '--version'])}"
-        )
+        record_progress(f"Chromium: {command_version([chromium_binary, '--version'])}")
+        record_progress(f"ChromeDriver: {command_version([chromedriver_binary, '--version'])}")
 
         service = Service(
             chromedriver_binary,
             log_output="/tmp/chromedriver.log",
         )
         driver = webdriver.Chrome(service=service, options=options)
-        driver.set_page_load_timeout(45)
+        driver.set_page_load_timeout(60)
         driver.set_script_timeout(30)
-        wait = WebDriverWait(driver, 20)
 
         for index, action in enumerate(ACTIONS, start=1):
             run_action(driver, action, index)
@@ -400,6 +426,7 @@ def finish():
     return redirect(url_for("index"))
 
 
+@app.get("/") # 修正ミス防止用ルーティング整合
 @app.get("/status")
 def status():
     with lock:
